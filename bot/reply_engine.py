@@ -1,67 +1,80 @@
-import re
-from dataclasses import dataclass
+import json
+import urllib.error
+import urllib.request
+
+from bot.config import GROQ_API_KEY, GROQ_MODEL, MAX_REPLY_CHARS, MIN_REPLY_CHARS
+
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+SYSTEM_PROMPT = f"""You write replies for a real person on X.
+
+Your job is to respond naturally to the exact post you receive.
+
+Rules:
+- Reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, including spaces and punctuation.
+- Sound like a human who actually read the post.
+- Be specific to the post. React to its idea, question, joke, observation, or situation.
+- Never use generic filler such as: Great post, Interesting, Absolutely, Well said, This, Exactly, Love this.
+- Do not summarize the post.
+- Do not mention that you are an AI.
+- Do not explain your reasoning.
+- Do not use hashtags unless the post clearly calls for one.
+- Avoid emojis unless one genuinely fits the conversation.
+- Do not invent facts.
+- If the post is only a greeting, engagement bait, giveaway, obvious spam, or something with no natural conversational opening, return NO_REPLY.
+- Return exactly one reply or NO_REPLY. No quotation marks, labels, or extra text.
+"""
 
 
-@dataclass(frozen=True)
-class ReplyAnalysis:
-    score: int
-    suggested_reply: str | None
-    reason: str
+def generate_reply(post_text: str) -> str | None:
+    """Generate one human-style reply suggestion, or None when no reply fits."""
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY is not configured")
 
+    payload = {
+        "model": GROQ_MODEL,
+        "temperature": 0.85,
+        "max_tokens": 80,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Post:\n{post_text}\n\nWrite the reply now.",
+            },
+        ],
+    }
 
-def _clean(text: str) -> str:
-    return re.sub(r"\s+", " ", text.strip())
+    request = urllib.request.Request(
+        GROQ_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
 
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Groq HTTP {exc.code}: {body[:500]}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Groq connection error: {exc.reason}") from exc
 
-def analyze_post(text: str) -> ReplyAnalysis:
-    """Score a post and produce a short reply suggestion when appropriate.
+    choices = result.get("choices", [])
+    if not choices:
+        return None
 
-    This V1 is deliberately deterministic and dependency-free. It is a safe
-    foundation that can later be replaced by an LLM without changing the
-    monitoring pipeline.
-    """
-    clean = _clean(text)
-    lower = clean.lower()
+    reply = str(choices[0].get("message", {}).get("content", "")).strip()
+    reply = reply.strip('"').strip()
 
-    if not clean:
-        return ReplyAnalysis(0, None, "Empty post")
+    if reply.upper() == "NO_REPLY":
+        return None
 
-    # Low-signal posts should still reach Telegram, but should not receive
-    # forced reply suggestions.
-    if re.search(r"^(gm|gn|good morning|good night)[!,.\s]*$", lower):
-        return ReplyAnalysis(10, None, "Greeting only")
+    if not (MIN_REPLY_CHARS <= len(reply) <= MAX_REPLY_CHARS):
+        return None
 
-    if len(clean) < 25:
-        return ReplyAnalysis(25, None, "Too little context")
-
-    keyword_replies = [
-        (("agent", "agents"), "Agents need rails."),
-        (("payment", "payments"), "Payments need this."),
-        (("wallet", "wallets"), "Wallets change this."),
-        (("airdrop", "airdrop"), "That's the key bit."),
-        (("launch", "launched", "launching"), "That's a big signal."),
-        (("funding", "funded", "raise", "raised"), "That's a big signal."),
-        (("data", "analytics", "onchain"), "The signal is clear."),
-        (("price", "market", "token"), "Market missed that."),
-    ]
-
-    for keywords, reply in keyword_replies:
-        if any(keyword in lower for keyword in keywords):
-            return ReplyAnalysis(85, reply, "Strong topical signal")
-
-    if "?" in clean:
-        return ReplyAnalysis(75, "That's the key bit.", "Direct question")
-
-    if any(word in lower for word in ("because", "however", "but", "yet", "instead", "why")):
-        return ReplyAnalysis(80, "That part matters.", "Contains an opinion or contrast")
-
-    if len(clean) >= 60:
-        return ReplyAnalysis(65, "That's the key bit.", "Enough context for a focused reply")
-
-    return ReplyAnalysis(40, None, "Low reply signal")
-
-
-def validate_reply(reply: str | None, min_chars: int = 15, max_chars: int = 20) -> bool:
-    if reply is None:
-        return False
-    return min_chars <= len(reply) <= max_chars
+    return reply
