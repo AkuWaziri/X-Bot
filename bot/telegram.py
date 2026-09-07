@@ -3,9 +3,8 @@ import asyncio
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from bot.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TWITTERAPIS_API_KEY
-from bot.db import get_db, get_pending_reply, mark_reply_posted, mark_reply_rejected, record_activity
-from bot.x.provider import get_x_provider
+from bot.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from bot.db import get_db, get_pending_reply, mark_reply_rejected, mark_reply_selected, record_activity
 
 
 def _authorized(update: Update) -> bool:
@@ -21,8 +20,9 @@ def send_new_post(
     suggested_reply: str | None = None,
     reply_reason: str | None = None,
     post_id: str | None = None,
+    suggested_replies: list[str] | None = None,
 ) -> None:
-    """Send a newly detected X post and optional reply suggestion to Telegram."""
+    """Send a newly detected X post and up to three reply suggestions to Telegram."""
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured")
     if not TELEGRAM_CHAT_ID:
@@ -34,15 +34,22 @@ def send_new_post(
     if url:
         message += f"\n\n🔗 {url}"
 
+    replies = suggested_replies or ([] if not suggested_reply else [suggested_reply])
     reply_markup = None
-    if suggested_reply:
-        message += f"\n\n💬 Suggested reply ({len(suggested_reply)} chars):\n{suggested_reply}"
-        if post_id:
+
+    if replies:
+        message += "\n\n💬 REPLY OPTIONS"
+        for index, reply in enumerate(replies[:3], start=1):
+            message += f"\n\n{index}️⃣ {reply} ({len(reply)} chars)"
+
+        if post_id and len(replies) == 3:
             reply_markup = InlineKeyboardMarkup(
-                [[
-                    InlineKeyboardButton("✅ Approve", callback_data=f"approve:{post_id}"),
-                    InlineKeyboardButton("❌ Reject", callback_data=f"reject:{post_id}"),
-                ]]
+                [
+                    [InlineKeyboardButton("1️⃣ SELECT REPLY 1", callback_data=f"select:1:{post_id}")],
+                    [InlineKeyboardButton("2️⃣ SELECT REPLY 2", callback_data=f"select:2:{post_id}")],
+                    [InlineKeyboardButton("3️⃣ SELECT REPLY 3", callback_data=f"select:3:{post_id}")],
+                    [InlineKeyboardButton("❌ REJECT ALL", callback_data=f"reject:{post_id}")],
+                ]
             )
     elif reply_reason:
         message += f"\n\nNo suggestion: {reply_reason}"
@@ -63,79 +70,13 @@ def send_new_post(
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
-    await update.message.reply_text(
-        "X-Bot is online.\n\nUse /status to check the bot."
-    )
+    await update.message.reply_text("X-Bot is online.\n\nUse /status to check the bot.")
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
-    await update.message.reply_text("🟢 X-Bot online\nManual approval mode: ON")
-
-
-async def approve_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _authorized(update):
-        return
-
-    if not context.args:
-        await update.message.reply_text("Usage: /reply POST_ID")
-        return
-
-    post_id = context.args[0].strip()
-    db = get_db()
-    pending = get_pending_reply(db, post_id)
-
-    if not pending:
-        await update.message.reply_text("No pending reply found for that post.")
-        return
-
-    suggested_reply = str(pending["suggested_reply"]).strip()
-    handle = str(pending.get("handle", ""))
-
-    try:
-        provider = get_x_provider()
-        result = provider.create_reply(suggested_reply, post_id)
-        reply_id = str(result.get("tweet_id", "")) or None
-        reply_url = result.get("url") or None
-        mark_reply_posted(db, post_id, reply_id, reply_url)
-        record_activity(
-            db,
-            "reply_approved",
-            handle,
-            post_id,
-            f"Manual reply posted: {suggested_reply} | reply_id={reply_id or ''} | url={reply_url or ''}",
-        )
-
-        confirmation = f"✅ Reply posted\n\n{suggested_reply}"
-        if reply_url:
-            confirmation += f"\n\n🔗 {reply_url}"
-        await update.message.reply_text(confirmation)
-    except Exception as exc:
-        record_activity(db, "error", handle, post_id, "Failed to post approved reply")
-        await update.message.reply_text(f"❌ Failed to post reply: {exc}")
-
-
-async def reject_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _authorized(update):
-        return
-
-    if not context.args:
-        await update.message.reply_text("Usage: /skip POST_ID")
-        return
-
-    post_id = context.args[0].strip()
-    db = get_db()
-    pending = get_pending_reply(db, post_id)
-
-    if not pending:
-        await update.message.reply_text("No pending reply found for that post.")
-        return
-
-    mark_reply_rejected(db, post_id)
-    handle = str(pending.get("handle", ""))
-    record_activity(db, "reply_rejected", handle, post_id, "Manual reply rejected")
-    await update.message.reply_text("⏭️ Reply rejected.")
+    await update.message.reply_text("🟢 X-Bot online\nManual reply selection: ON")
 
 
 def main() -> None:
@@ -145,6 +86,4 @@ def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
-    application.add_handler(CommandHandler("reply", approve_reply))
-    application.add_handler(CommandHandler("skip", reject_reply))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
