@@ -2,9 +2,14 @@ name: X-Bot
 
 on:
   workflow_dispatch:
+  schedule:
+    # GitHub Actions cron uses UTC.
+    # Europe/Zurich is UTC+2 during summer and UTC+1 during winter.
+    # Current schedule: 10:00, 16:00 and 20:00 Zurich summer time.
+    - cron: "0 8,14,18 * * *"
 
 jobs:
-  bot-test:
+  monitor:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,31 +23,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Send Telegram test feed
+      - name: Run monitoring cycle
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          python - <<'PY'
-          import os
-          import urllib.parse
-          import urllib.request
-
-          token = os.environ["TELEGRAM_BOT_TOKEN"]
-          chat_id = os.environ["TELEGRAM_CHAT_ID"]
-          message = (
-              "🟢 X-Bot ONLINE\n\n"
-              "GitHub → Telegram connection is working.\n"
-              "The monitoring engine is ready for the next phase."
-          )
-
-          url = f"https://api.telegram.org/bot{token}/sendMessage"
-          data = urllib.parse.urlencode({"chat_id": chat_id, "text": message}).encode()
-          request = urllib.request.Request(url, data=data, method="POST")
-
-          with urllib.request.urlopen(request, timeout=20) as response:
-              body = response.read().decode()
-              if '"ok":true' not in body:
-                  raise SystemExit(f"Telegram rejected the message: {body}")
-              print("Telegram test feed sent successfully.")
-          PY
+        run: python -m bot.monitor
