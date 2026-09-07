@@ -6,11 +6,10 @@ from bot.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from bot.db import (
     get_db,
     get_pending_reply,
-    mark_reply_posted,
     mark_reply_rejected,
+    mark_reply_selected,
     record_activity,
 )
-from bot.x.provider import get_x_provider
 
 
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
@@ -32,17 +31,11 @@ def telegram_call(method: str, params: dict | None = None) -> dict:
 
 
 def send_message(text: str) -> None:
-    telegram_call(
-        "sendMessage",
-        {"chat_id": TELEGRAM_CHAT_ID, "text": text[:4096]},
-    )
+    telegram_call("sendMessage", {"chat_id": TELEGRAM_CHAT_ID, "text": text[:4096]})
 
 
 def answer_callback(callback_query_id: str, text: str = "") -> None:
-    telegram_call(
-        "answerCallbackQuery",
-        {"callback_query_id": callback_query_id, "text": text[:200]},
-    )
+    telegram_call("answerCallbackQuery", {"callback_query_id": callback_query_id, "text": text[:200]})
 
 
 def remove_buttons(chat_id: str, message_id: int) -> None:
@@ -56,36 +49,34 @@ def remove_buttons(chat_id: str, message_id: int) -> None:
     )
 
 
-def process_reply(db, post_id: str) -> None:
+def process_select(db, post_id: str, reply_number: int) -> None:
     pending = get_pending_reply(db, post_id)
     if not pending:
         send_message("No pending reply found for that post.")
         return
 
-    suggested_reply = str(pending["suggested_reply"]).strip()
+    key = f"reply_{reply_number}"
+    suggested_reply = str(pending.get(key, "")).strip()
     handle = str(pending.get("handle", ""))
 
-    try:
-        provider = get_x_provider()
-        result = provider.create_reply(suggested_reply, post_id)
-        reply_id = str(result.get("tweet_id", "")) or None
-        reply_url = result.get("url") or None
-        mark_reply_posted(db, post_id, reply_id, reply_url)
-        record_activity(
-            db,
-            "reply_approved",
-            handle,
-            post_id,
-            f"Manual reply posted: {suggested_reply} | reply_id={reply_id or ''} | url={reply_url or ''}",
-        )
+    if not suggested_reply:
+        send_message("That reply option is unavailable.")
+        return
 
-        message = f"✅ Reply posted\n\n{suggested_reply}"
-        if reply_url:
-            message += f"\n\n🔗 {reply_url}"
-        send_message(message)
-    except Exception:
-        record_activity(db, "error", handle, post_id, "Failed to post approved reply")
-        send_message("❌ Failed to post reply. Check the GitHub Actions log.")
+    mark_reply_selected(db, post_id, reply_number)
+    record_activity(
+        db,
+        "reply_selected",
+        handle,
+        post_id,
+        f"Manual reply option {reply_number} selected: {suggested_reply}",
+    )
+
+    send_message(
+        f"✅ REPLY {reply_number} SELECTED\n\n"
+        f"{suggested_reply}\n\n"
+        "Copy it and post it manually under the original X post."
+    )
 
 
 def process_skip(db, post_id: str) -> None:
@@ -96,8 +87,8 @@ def process_skip(db, post_id: str) -> None:
 
     mark_reply_rejected(db, post_id)
     handle = str(pending.get("handle", ""))
-    record_activity(db, "reply_rejected", handle, post_id, "Manual reply rejected")
-    send_message("⏭️ Reply rejected.")
+    record_activity(db, "reply_rejected", handle, post_id, "All reply suggestions rejected")
+    send_message("⏭️ All reply suggestions rejected.")
 
 
 def process_updates() -> None:
@@ -106,7 +97,10 @@ def process_updates() -> None:
 
     response = telegram_call(
         "getUpdates",
-        {"limit": 100, "allowed_updates": json.dumps(["message", "callback_query"])},
+        {
+            "limit": 100,
+            "allowed_updates": json.dumps(["message", "callback_query"]),
+        },
     )
     updates = response.get("result", [])
     if not updates:
@@ -129,17 +123,23 @@ def process_updates() -> None:
                 continue
 
             callback_data = str(callback.get("data", ""))
-            action, _, post_id = callback_data.partition(":")
-            if not post_id:
-                answer_callback(str(callback.get("id", "")), "Invalid action")
-                continue
+            parts = callback_data.split(":", 2)
 
-            if action == "approve":
-                answer_callback(str(callback.get("id", "")), "Posting reply...")
-                process_reply(db, post_id)
-            elif action == "reject":
-                answer_callback(str(callback.get("id", "")), "Reply rejected")
-                process_skip(db, post_id)
+            if parts[0] == "select" and len(parts) == 3:
+                try:
+                    reply_number = int(parts[1])
+                except ValueError:
+                    reply_number = 0
+                if reply_number in (1, 2, 3):
+                    answer_callback(str(callback.get("id", "")), f"Reply {reply_number} selected")
+                    process_select(db, parts[2], reply_number)
+                else:
+                    answer_callback(str(callback.get("id", "")), "Invalid reply option")
+            elif parts[0] == "reject" and len(parts) == 2:
+                answer_callback(str(callback.get("id", "")), "All replies rejected")
+                process_skip(db, parts[1])
+            else:
+                answer_callback(str(callback.get("id", "")), "Invalid action")
 
             message_id = callback_message.get("message_id")
             if message_id:
@@ -152,7 +152,6 @@ def process_updates() -> None:
         message = update.get("message") or {}
         chat = message.get("chat") or {}
         chat_id = str(chat.get("id", ""))
-
         if chat_id != str(TELEGRAM_CHAT_ID):
             continue
 
@@ -162,22 +161,9 @@ def process_updates() -> None:
             continue
 
         command = parts[0].split("@", 1)[0].lower()
-        post_id = parts[1] if len(parts) > 1 else ""
+        if command == "/status":
+            send_message("🟢 X-Bot online\nManual reply selection: ON")
 
-        if command == "/reply":
-            if post_id:
-                process_reply(db, post_id)
-            else:
-                send_message("Usage: /reply POST_ID")
-        elif command == "/skip":
-            if post_id:
-                process_skip(db, post_id)
-            else:
-                send_message("Usage: /skip POST_ID")
-        elif command == "/status":
-            send_message("🟢 X-Bot online\nManual approval mode: ON")
-
-    # Confirm all updates only after this batch has been processed.
     if highest_update_id is not None:
         telegram_call(
             "getUpdates",
