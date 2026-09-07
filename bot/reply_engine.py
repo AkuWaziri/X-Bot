@@ -33,8 +33,8 @@ OUTPUT RULES:
 
 
 def _clean_reply(reply: str) -> str:
-    reply = re.sub(r"\\s+", " ", reply.strip())
-    reply = re.sub(r"^(?:R[123]\\s*:\\s*|[-*•]\\s*|\\d+[.)]\\s*)", "", reply, flags=re.IGNORECASE)
+    reply = re.sub(r"\s+", " ", reply.strip())
+    reply = re.sub(r"^(?:R[123]\s*:\s*|[-*•]\s*|\d+[.)]\s*)", "", reply, flags=re.IGNORECASE)
     return reply.strip('"').strip()
 
 
@@ -49,7 +49,7 @@ def _parse_replies(raw: str) -> list[str]:
     # Prefer explicit R1/R2/R3 markers. This also works if the model inserts
     # blank lines between suggestions.
     tagged = re.findall(
-        r"R[123]\\s*:\\s*(.*?)(?=\\n\\s*R[123]\\s*:|$)",
+        r"R[123]\s*:\s*(.*?)(?=\n\s*R[123]\s*:|$)",
         raw,
         flags=re.IGNORECASE | re.DOTALL,
     )
