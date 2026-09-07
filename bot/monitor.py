@@ -1,7 +1,6 @@
 import logging
 
 from bot.accounts import load_accounts
-from bot.analyzer import select_best_post
 from bot.db import get_db, post_seen, record_activity, save_post
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
@@ -32,58 +31,46 @@ def run_monitor_cycle() -> None:
 
     for handle in accounts:
         try:
-            posts = provider.get_latest_posts(handle, limit=2)
+            posts = provider.get_latest_posts(handle, limit=1)
         except Exception:
-            logger.exception("Failed to fetch posts for %s", handle)
-            record_activity(db, "error", handle, None, "Failed to fetch posts from X provider")
+            logger.exception("Failed to fetch post for %s", handle)
+            record_activity(db, "error", handle, None, "Failed to fetch latest post from X provider")
             continue
 
-        logger.info("Fetched %d latest original posts for %s", len(posts), handle)
-        unseen_posts = []
+        logger.info("Fetched %d latest post for %s", len(posts), handle)
 
-        for post in posts:
-            if post_seen(db, post.id):
-                logger.info("SEEN | %s | %s", handle, post.id)
-                continue
-            save_post(db, post)
-            record_activity(db, "new_post", handle, post.id, post.text.replace("\n", " "))
-            unseen_posts.append(post)
-
-        if not unseen_posts:
+        if not posts:
+            logger.info("No post returned for %s", handle)
             continue
 
-        analysis = select_best_post(unseen_posts)
-        if analysis is None:
-            record_activity(
-                db,
-                "skipped",
-                handle,
-                None,
-                "No qualifying reply opportunity among the two latest posts",
-            )
+        post = posts[0]
+
+        if post_seen(db, post.id):
+            logger.info("SEEN | %s | %s", handle, post.id)
             continue
 
-        selected = analysis.post
+        save_post(db, post)
+        record_activity(db, "new_post", handle, post.id, post.text.replace("\n", " "))
 
         try:
-            if telegram_already_sent(db, selected.id):
+            if telegram_already_sent(db, post.id):
                 continue
-            send_new_post(handle, selected.text, selected.url)
+            send_new_post(handle, post.text, post.url)
             record_activity(
                 db,
                 "telegram_sent",
                 handle,
-                selected.id,
-                "Qualifying post notification sent to Telegram",
+                post.id,
+                "Latest post notification sent to Telegram",
             )
         except Exception:
-            logger.exception("Failed to send Telegram notification for %s", selected.id)
+            logger.exception("Failed to send Telegram notification for %s", post.id)
             record_activity(
                 db,
                 "error",
                 handle,
-                selected.id,
-                "Failed to send qualifying post notification to Telegram",
+                post.id,
+                "Failed to send latest post notification to Telegram",
             )
 
 
