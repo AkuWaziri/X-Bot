@@ -96,12 +96,7 @@ class TwitterAPIsProvider(XProvider):
         return posts
 
     def create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
-        """Publish a reply from the configured X session."""
-        if not TWITTERAPIS_X_AUTH_TOKEN or not TWITTERAPIS_CT0:
-            raise RuntimeError(
-                "X write session is not configured. Set TWITTERAPIS_X_AUTH_TOKEN and TWITTERAPIS_CT0."
-            )
-
+        """Publish a reply using inline credentials when supplied, otherwise the registered session."""
         result = self._request(
             "POST",
             "tweet/create",
