@@ -6,10 +6,10 @@ from bot.db import (
     get_db,
     post_seen,
     record_activity,
-    save_pending_reply,
+    save_pending_replies,
     save_post,
 )
-from bot.reply_engine import generate_reply, validate_reply
+from bot.reply_engine import generate_replies, validate_replies
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
 
@@ -60,72 +60,36 @@ def run_monitor_cycle() -> None:
         save_post(db, post)
         record_activity(db, "new_post", handle, post.id, post.text.replace("\n", " "))
 
-        suggested_reply = None
+        replies = None
         try:
-            suggested_reply = generate_reply(post.text)
+            replies = generate_replies(post.text)
         except Exception:
-            logger.exception("Failed to generate reply suggestion for %s", post.id)
+            logger.exception("Failed to generate reply suggestions for %s", post.id)
             record_activity(
                 db,
                 "error",
                 handle,
                 post.id,
-                "Failed to generate reply suggestion",
+                "Failed to generate reply suggestions",
             )
 
-        if suggested_reply and not validate_reply(suggested_reply):
-            logger.warning(
-                "Reply length validation failed for %s: %r (%d chars)",
-                post.id,
-                suggested_reply,
-                len(suggested_reply),
-            )
-            suggested_reply = None
+        if replies and not validate_replies(replies):
+            logger.warning("Reply validation failed for %s: %r", post.id, replies)
+            replies = None
 
-        if suggested_reply:
+        if replies:
             record_activity(
                 db,
-                "reply_suggested",
+                "replies_suggested",
                 handle,
                 post.id,
-                f"Reply suggestion generated: {suggested_reply}",
+                "Three reply suggestions generated",
             )
 
             if AUTO_REPLY:
-                try:
-                    result = provider.create_reply(suggested_reply, post.id)
-                    reply_id = str(result.get("tweet_id", ""))
-                    reply_url = result.get("url", "")
-                    record_activity(
-                        db,
-                        "reply_posted",
-                        handle,
-                        post.id,
-                        f"Automatic reply posted: {suggested_reply} | reply_id={reply_id} | url={reply_url}",
-                    )
-                    logger.info(
-                        "AUTO REPLY | %s | %s | %s",
-                        handle,
-                        post.id,
-                        suggested_reply,
-                    )
-                except Exception:
-                    logger.exception("Failed to publish automatic reply for %s", post.id)
-                    record_activity(
-                        db,
-                        "error",
-                        handle,
-                        post.id,
-                        "Failed to publish automatic reply",
-                    )
+                logger.warning("AUTO_REPLY is enabled but manual three-choice mode is required; skipping automatic post for %s", post.id)
             else:
-                save_pending_reply(
-                    db,
-                    post.id,
-                    handle,
-                    post.text,
-                    suggested_reply,
-                )
+                save_pending_replies(db, post.id, handle, post.text, replies)
 
         try:
             if telegram_already_sent(db, post.id):
@@ -135,7 +99,7 @@ def run_monitor_cycle() -> None:
                 handle,
                 post.text,
                 post.url,
-                suggested_reply=suggested_reply,
+                suggested_replies=replies,
                 post_id=post.id,
             )
             record_activity(
