@@ -44,6 +44,9 @@ def save_pending_replies(
             "post_id": post_id,
             "handle": handle,
             "post_text": post_text,
+            # Keep the legacy required column populated while the new
+            # three-option columns are used by the bot.
+            "suggested_reply": replies[0],
             "reply_1": replies[0],
             "reply_2": replies[1],
             "reply_3": replies[2],
