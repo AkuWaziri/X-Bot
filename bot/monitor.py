@@ -52,21 +52,44 @@ def run_monitor_cycle() -> None:
         if not unseen_posts:
             continue
 
-        selected = select_best_post(unseen_posts)
-        if selected is None:
-            record_activity(db, "skipped", handle, None, "No qualifying reply opportunity among the two latest posts")
+        analysis = select_best_post(unseen_posts)
+        if analysis is None:
+            record_activity(
+                db,
+                "skipped",
+                handle,
+                None,
+                "No qualifying reply opportunity among the two latest posts",
+            )
             continue
+
+        selected = analysis.post
 
         try:
             if telegram_already_sent(db, selected.id):
                 continue
             send_new_post(handle, selected.text, selected.url)
-            record_activity(db, "telegram_sent", handle, selected.id, "Qualifying post notification sent to Telegram")
+            record_activity(
+                db,
+                "telegram_sent",
+                handle,
+                selected.id,
+                "Qualifying post notification sent to Telegram",
+            )
         except Exception:
             logger.exception("Failed to send Telegram notification for %s", selected.id)
-            record_activity(db, "error", handle, selected.id, "Failed to send qualifying post notification to Telegram")
+            record_activity(
+                db,
+                "error",
+                handle,
+                selected.id,
+                "Failed to send qualifying post notification to Telegram",
+            )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        level=logging.INFO,
+    )
     run_monitor_cycle()
