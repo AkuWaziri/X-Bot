@@ -53,12 +53,15 @@ def run_monitor_cycle() -> None:
 
         post = posts[0]
 
-        if post_seen(db, post.id):
+        # A post may have been marked seen before a previous run failed.
+        # Only skip it once Telegram delivery has actually completed.
+        if post_seen(db, post.id) and telegram_already_sent(db, post.id):
             logger.info("SEEN | %s | %s", handle, post.id)
             continue
 
-        save_post(db, post)
-        record_activity(db, "new_post", handle, post.id, post.text.replace("\n", " "))
+        if not post_seen(db, post.id):
+            save_post(db, post)
+            record_activity(db, "new_post", handle, post.id, post.text.replace("\n", " "))
 
         replies = None
         try:
