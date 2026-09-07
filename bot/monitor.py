@@ -8,7 +8,7 @@ from bot.db import (
     save_pending_reply,
     save_post,
 )
-from bot.reply_engine import analyze_post, validate_reply
+from bot.reply_engine import generate_reply, validate_reply
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
 
@@ -59,8 +59,18 @@ def run_monitor_cycle() -> None:
         save_post(db, post)
         record_activity(db, "new_post", handle, post.id, post.text.replace("\n", " "))
 
-        analysis = analyze_post(post.text)
-        suggested_reply = analysis.suggested_reply
+        suggested_reply = None
+        try:
+            suggested_reply = generate_reply(post.text)
+        except Exception:
+            logger.exception("Failed to generate reply suggestion for %s", post.id)
+            record_activity(
+                db,
+                "error",
+                handle,
+                post.id,
+                "Failed to generate reply suggestion",
+            )
 
         if suggested_reply and not validate_reply(suggested_reply):
             logger.warning(
@@ -70,7 +80,6 @@ def run_monitor_cycle() -> None:
                 len(suggested_reply),
             )
             suggested_reply = None
-            analysis = analysis.__class__(analysis.score, None, "Reply failed length validation")
 
         if suggested_reply:
             save_pending_reply(
@@ -96,9 +105,7 @@ def run_monitor_cycle() -> None:
                 handle,
                 post.text,
                 post.url,
-                reply_score=analysis.score,
                 suggested_reply=suggested_reply,
-                reply_reason=analysis.reason,
                 post_id=post.id,
             )
             record_activity(
