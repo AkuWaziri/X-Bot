@@ -1,6 +1,7 @@
 import logging
 
 from bot.accounts import load_accounts
+from bot.config import AUTO_REPLY
 from bot.db import (
     get_db,
     post_seen,
@@ -82,13 +83,6 @@ def run_monitor_cycle() -> None:
             suggested_reply = None
 
         if suggested_reply:
-            save_pending_reply(
-                db,
-                post.id,
-                handle,
-                post.text,
-                suggested_reply,
-            )
             record_activity(
                 db,
                 "reply_suggested",
@@ -96,6 +90,42 @@ def run_monitor_cycle() -> None:
                 post.id,
                 f"Reply suggestion generated: {suggested_reply}",
             )
+
+            if AUTO_REPLY:
+                try:
+                    result = provider.create_reply(suggested_reply, post.id)
+                    reply_id = str(result.get("tweet_id", ""))
+                    reply_url = result.get("url", "")
+                    record_activity(
+                        db,
+                        "reply_posted",
+                        handle,
+                        post.id,
+                        f"Automatic reply posted: {suggested_reply} | reply_id={reply_id} | url={reply_url}",
+                    )
+                    logger.info(
+                        "AUTO REPLY | %s | %s | %s",
+                        handle,
+                        post.id,
+                        suggested_reply,
+                    )
+                except Exception:
+                    logger.exception("Failed to publish automatic reply for %s", post.id)
+                    record_activity(
+                        db,
+                        "error",
+                        handle,
+                        post.id,
+                        "Failed to publish automatic reply",
+                    )
+            else:
+                save_pending_reply(
+                    db,
+                    post.id,
+                    handle,
+                    post.text,
+                    suggested_reply,
+                )
 
         try:
             if telegram_already_sent(db, post.id):
