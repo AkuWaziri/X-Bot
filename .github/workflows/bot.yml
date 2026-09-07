@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Check Telegram webhook
+      - name: Reset Telegram webhook for polling
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
@@ -36,15 +36,14 @@ jobs:
           import urllib.request
 
           token = os.environ["TELEGRAM_BOT_TOKEN"]
-          url = f"https://api.telegram.org/bot{token}/getWebhookInfo"
+          url = f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=false"
           with urllib.request.urlopen(url, timeout=20) as response:
               data = json.load(response)
 
-          info = data.get("result", {})
-          print("Telegram webhook configured:", bool(info.get("url")))
-          print("Pending updates:", info.get("pending_update_count", 0))
-          if info.get("last_error_message"):
-              print("Last webhook error:", info["last_error_message"])
+          if not data.get("ok"):
+              raise RuntimeError(f"Telegram deleteWebhook failed: {data}")
+
+          print("Telegram webhook removed; polling is enabled.")
           PY
 
       - name: Process Telegram approvals
