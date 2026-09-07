@@ -38,6 +38,24 @@ def send_message(text: str) -> None:
     )
 
 
+def answer_callback(callback_query_id: str, text: str = "") -> None:
+    telegram_call(
+        "answerCallbackQuery",
+        {"callback_query_id": callback_query_id, "text": text[:200]},
+    )
+
+
+def remove_buttons(chat_id: str, message_id: int) -> None:
+    telegram_call(
+        "editMessageReplyMarkup",
+        {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reply_markup": json.dumps({"inline_keyboard": []}),
+        },
+    )
+
+
 def process_reply(db, post_id: str) -> None:
     pending = get_pending_reply(db, post_id)
     if not pending:
@@ -88,7 +106,7 @@ def process_updates() -> None:
 
     response = telegram_call(
         "getUpdates",
-        {"limit": 100, "allowed_updates": json.dumps(["message"])},
+        {"limit": 100, "allowed_updates": json.dumps(["message", "callback_query"])},
     )
     updates = response.get("result", [])
     if not updates:
@@ -101,6 +119,35 @@ def process_updates() -> None:
         update_id = update.get("update_id")
         if update_id is not None:
             highest_update_id = int(update_id)
+
+        callback = update.get("callback_query")
+        if callback:
+            callback_message = callback.get("message") or {}
+            callback_chat = callback_message.get("chat") or {}
+            callback_chat_id = str(callback_chat.get("id", ""))
+            if callback_chat_id != str(TELEGRAM_CHAT_ID):
+                continue
+
+            callback_data = str(callback.get("data", ""))
+            action, _, post_id = callback_data.partition(":")
+            if not post_id:
+                answer_callback(str(callback.get("id", "")), "Invalid action")
+                continue
+
+            if action == "approve":
+                answer_callback(str(callback.get("id", "")), "Posting reply...")
+                process_reply(db, post_id)
+            elif action == "reject":
+                answer_callback(str(callback.get("id", "")), "Reply rejected")
+                process_skip(db, post_id)
+
+            message_id = callback_message.get("message_id")
+            if message_id:
+                try:
+                    remove_buttons(callback_chat_id, int(message_id))
+                except Exception:
+                    pass
+            continue
 
         message = update.get("message") or {}
         chat = message.get("chat") or {}
@@ -137,7 +184,7 @@ def process_updates() -> None:
             {
                 "offset": highest_update_id + 1,
                 "limit": 1,
-                "allowed_updates": json.dumps(["message"]),
+                "allowed_updates": json.dumps(["message", "callback_query"]),
             },
         )
 
