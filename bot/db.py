@@ -29,6 +29,25 @@ def save_post(db: Client, post) -> None:
     ).execute()
 
 
+def save_pending_reply(
+    db: Client,
+    post_id: str,
+    handle: str,
+    post_text: str,
+    suggested_reply: str,
+) -> None:
+    db.table("pending_replies").upsert(
+        {
+            "post_id": post_id,
+            "handle": handle,
+            "post_text": post_text,
+            "suggested_reply": suggested_reply,
+            "status": "pending",
+        },
+        on_conflict="post_id",
+    ).execute()
+
+
 def record_activity(db: Client, event_type: str, handle: str, post_id: str | None, message: str) -> None:
     db.table("activity_log").insert(
         {
