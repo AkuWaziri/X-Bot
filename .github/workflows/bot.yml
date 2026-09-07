@@ -4,9 +4,8 @@ on:
   workflow_dispatch:
   schedule:
     # GitHub Actions cron uses UTC.
-    # Europe/Zurich is UTC+2 during summer and UTC+1 during winter.
-    # Current schedule: 10:00, 16:00 and 20:00 Zurich summer time.
-    - cron: "0 8,14,18 * * *"
+    # Current schedule: 10:00, 16:00 and 20:00 UTC.
+    - cron: "0 10,16,20 * * *"
 
 jobs:
   monitor:
@@ -27,4 +26,5 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TWITTERAPIS_API_KEY: ${{ secrets.TWITTERAPIS_API_KEY }}
         run: python -m bot.monitor
