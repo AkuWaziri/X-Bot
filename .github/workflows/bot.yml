@@ -4,8 +4,12 @@ on:
   workflow_dispatch:
   schedule:
     # GitHub Actions cron uses UTC.
-    # Current schedule: 10:00, 16:00 and 20:00 UTC.
-    - cron: "0 10,16,20 * * *"
+    # Run every 15 minutes so Telegram approvals are processed promptly.
+    - cron: "*/15 * * * *"
+
+concurrency:
+  group: x-bot-monitor
+  cancel-in-progress: false
 
 jobs:
   monitor:
@@ -21,6 +25,15 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Process Telegram approvals
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TWITTERAPIS_API_KEY: ${{ secrets.TWITTERAPIS_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python -m bot.telegram_commands
 
       - name: Run monitoring cycle
         env:
