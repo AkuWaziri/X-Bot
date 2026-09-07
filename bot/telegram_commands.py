@@ -65,9 +65,9 @@ def process_reply(db, post_id: str) -> None:
         if reply_url:
             message += f"\n\n🔗 {reply_url}"
         send_message(message)
-    except Exception as exc:
+    except Exception:
         record_activity(db, "error", handle, post_id, "Failed to post approved reply")
-        send_message(f"❌ Failed to post reply: {exc}")
+        send_message("❌ Failed to post reply. Check the GitHub Actions log.")
 
 
 def process_skip(db, post_id: str) -> None:
@@ -86,22 +86,25 @@ def process_updates() -> None:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
 
-    response = telegram_call("getUpdates", {"limit": 100, "allowed_updates": json.dumps(["message"])})
+    response = telegram_call(
+        "getUpdates",
+        {"limit": 100, "allowed_updates": json.dumps(["message"])},
+    )
     updates = response.get("result", [])
     if not updates:
         return
 
     db = get_db()
+    highest_update_id = None
 
     for update in updates:
         update_id = update.get("update_id")
+        if update_id is not None:
+            highest_update_id = int(update_id)
+
         message = update.get("message") or {}
         chat = message.get("chat") or {}
         chat_id = str(chat.get("id", ""))
-
-        # Confirm every fetched update, including messages from other chats.
-        if update_id is not None:
-            telegram_call("getUpdates", {"offset": int(update_id) + 1, "limit": 1, "allowed_updates": json.dumps(["message"])})
 
         if chat_id != str(TELEGRAM_CHAT_ID):
             continue
@@ -126,6 +129,17 @@ def process_updates() -> None:
                 send_message("Usage: /skip POST_ID")
         elif command == "/status":
             send_message("🟢 X-Bot online\nManual approval mode: ON")
+
+    # Confirm all updates only after this batch has been processed.
+    if highest_update_id is not None:
+        telegram_call(
+            "getUpdates",
+            {
+                "offset": highest_update_id + 1,
+                "limit": 1,
+                "allowed_updates": json.dumps(["message"]),
+            },
+        )
 
 
 if __name__ == "__main__":
