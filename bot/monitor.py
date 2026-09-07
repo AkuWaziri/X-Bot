@@ -1,6 +1,7 @@
 import logging
 
 from bot.accounts import load_accounts
+from bot.analyzer import select_best_post
 from bot.db import get_db, post_seen, record_activity, save_post
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
@@ -22,7 +23,7 @@ def telegram_already_sent(db, post_id: str) -> bool:
 
 
 def run_monitor_cycle() -> None:
-    """Fetch posts, persist new posts, and send new-post notifications to Telegram."""
+    """Fetch posts, select one qualifying post per handle, and notify Telegram."""
     accounts = load_accounts()
 
     if not accounts:
@@ -42,6 +43,7 @@ def run_monitor_cycle() -> None:
 
         logger.info("Fetched %d original posts for %s", len(posts), handle)
 
+        unseen_posts = []
         for post in posts:
             if post_seen(db, post.id):
                 logger.info("SEEN | %s | %s", handle, post.id)
@@ -56,30 +58,56 @@ def run_monitor_cycle() -> None:
                 post.text.replace("\n", " "),
             )
             logger.info("NEW | %s | %s | %s", handle, post.id, post.text.replace("\n", " "))
+            unseen_posts.append(post)
 
-            try:
-                if telegram_already_sent(db, post.id):
-                    logger.info("TELEGRAM ALREADY SENT | %s | %s", handle, post.id)
-                    continue
+        if not unseen_posts:
+            logger.info("NO NEW POSTS | %s", handle)
+            continue
 
-                send_new_post(handle, post.text, post.url)
-                record_activity(
-                    db,
-                    "telegram_sent",
-                    handle,
-                    post.id,
-                    "New post notification sent to Telegram",
-                )
-                logger.info("TELEGRAM SENT | %s | %s", handle, post.id)
-            except Exception:
-                logger.exception("Failed to send Telegram notification for %s", post.id)
-                record_activity(
-                    db,
-                    "error",
-                    handle,
-                    post.id,
-                    "Failed to send new post notification to Telegram",
-                )
+        winner = select_best_post(unseen_posts)
+        if winner is None:
+            logger.info("NO QUALIFYING POST | %s", handle)
+            record_activity(
+                db,
+                "skipped",
+                handle,
+                None,
+                "No new post met the reply-opportunity threshold",
+            )
+            continue
+
+        post = winner.post
+        logger.info(
+            "QUALIFYING | %s | %s | score=%d | %s",
+            handle,
+            post.id,
+            winner.score,
+            winner.reason,
+        )
+
+        try:
+            if telegram_already_sent(db, post.id):
+                logger.info("TELEGRAM ALREADY SENT | %s | %s", handle, post.id)
+                continue
+
+            send_new_post(handle, post.text, post.url)
+            record_activity(
+                db,
+                "telegram_sent",
+                handle,
+                post.id,
+                f"Reply opportunity sent to Telegram | score={winner.score} | {winner.reason}",
+            )
+            logger.info("TELEGRAM SENT | %s | %s", handle, post.id)
+        except Exception:
+            logger.exception("Failed to send Telegram notification for %s", post.id)
+            record_activity(
+                db,
+                "error",
+                handle,
+                post.id,
+                "Failed to send reply opportunity notification to Telegram",
+            )
 
 
 if __name__ == "__main__":
