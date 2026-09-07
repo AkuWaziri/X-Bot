@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 
 def telegram_already_sent(db, post_id: str) -> bool:
-    """Check whether Telegram delivery was already recorded for this post."""
     result = (
         db.table("activity_log")
         .select("id")
@@ -23,9 +22,7 @@ def telegram_already_sent(db, post_id: str) -> bool:
 
 
 def run_monitor_cycle() -> None:
-    """Fetch posts, select one qualifying post per handle, and notify Telegram."""
     accounts = load_accounts()
-
     if not accounts:
         logger.info("No monitored X accounts configured.")
         return
@@ -35,84 +32,41 @@ def run_monitor_cycle() -> None:
 
     for handle in accounts:
         try:
-            posts = provider.get_latest_posts(handle, limit=20)
+            posts = provider.get_latest_posts(handle, limit=2)
         except Exception:
             logger.exception("Failed to fetch posts for %s", handle)
             record_activity(db, "error", handle, None, "Failed to fetch posts from X provider")
             continue
 
-        logger.info("Fetched %d original posts for %s", len(posts), handle)
-
+        logger.info("Fetched %d latest original posts for %s", len(posts), handle)
         unseen_posts = []
+
         for post in posts:
             if post_seen(db, post.id):
                 logger.info("SEEN | %s | %s", handle, post.id)
                 continue
-
             save_post(db, post)
-            record_activity(
-                db,
-                "new_post",
-                handle,
-                post.id,
-                post.text.replace("\n", " "),
-            )
-            logger.info("NEW | %s | %s | %s", handle, post.id, post.text.replace("\n", " "))
+            record_activity(db, "new_post", handle, post.id, post.text.replace("\n", " "))
             unseen_posts.append(post)
 
         if not unseen_posts:
-            logger.info("NO NEW POSTS | %s", handle)
             continue
 
-        winner = select_best_post(unseen_posts)
-        if winner is None:
-            logger.info("NO QUALIFYING POST | %s", handle)
-            record_activity(
-                db,
-                "skipped",
-                handle,
-                None,
-                "No new post met the reply-opportunity threshold",
-            )
+        selected = select_best_post(unseen_posts)
+        if selected is None:
+            record_activity(db, "skipped", handle, None, "No qualifying reply opportunity among the two latest posts")
             continue
-
-        post = winner.post
-        logger.info(
-            "QUALIFYING | %s | %s | score=%d | %s",
-            handle,
-            post.id,
-            winner.score,
-            winner.reason,
-        )
 
         try:
-            if telegram_already_sent(db, post.id):
-                logger.info("TELEGRAM ALREADY SENT | %s | %s", handle, post.id)
+            if telegram_already_sent(db, selected.id):
                 continue
-
-            send_new_post(handle, post.text, post.url)
-            record_activity(
-                db,
-                "telegram_sent",
-                handle,
-                post.id,
-                f"Reply opportunity sent to Telegram | score={winner.score} | {winner.reason}",
-            )
-            logger.info("TELEGRAM SENT | %s | %s", handle, post.id)
+            send_new_post(handle, selected.text, selected.url)
+            record_activity(db, "telegram_sent", handle, selected.id, "Qualifying post notification sent to Telegram")
         except Exception:
-            logger.exception("Failed to send Telegram notification for %s", post.id)
-            record_activity(
-                db,
-                "error",
-                handle,
-                post.id,
-                "Failed to send reply opportunity notification to Telegram",
-            )
+            logger.exception("Failed to send Telegram notification for %s", selected.id)
+            record_activity(db, "error", handle, selected.id, "Failed to send qualifying post notification to Telegram")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        level=logging.INFO,
-    )
+    logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
     run_monitor_cycle()
