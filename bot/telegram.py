@@ -1,6 +1,6 @@
 import asyncio
 
-from telegram import Update
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from bot.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TWITTERAPIS_API_KEY
@@ -34,21 +34,28 @@ def send_new_post(
     if url:
         message += f"\n\n🔗 {url}"
 
+    reply_markup = None
     if suggested_reply:
         message += f"\n\n💬 Suggested reply ({len(suggested_reply)} chars):\n{suggested_reply}"
         if post_id:
-            message += f"\n\nApprove: /reply {post_id}"
-            message += f"\nReject: /skip {post_id}"
+            reply_markup = InlineKeyboardMarkup(
+                [[
+                    InlineKeyboardButton("✅ Approve", callback_data=f"approve:{post_id}"),
+                    InlineKeyboardButton("❌ Reject", callback_data=f"reject:{post_id}"),
+                ]]
+            )
     elif reply_reason:
         message += f"\n\nNo suggestion: {reply_reason}"
 
     message = message[:4096]
 
     async def _send() -> None:
-        from telegram import Bot
-
         async with Bot(token=TELEGRAM_BOT_TOKEN) as bot:
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+            await bot.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=message,
+                reply_markup=reply_markup,
+            )
 
     asyncio.run(_send())
 
