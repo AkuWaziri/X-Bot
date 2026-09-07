@@ -48,6 +48,31 @@ def save_pending_reply(
     ).execute()
 
 
+def get_pending_reply(db: Client, post_id: str) -> dict | None:
+    result = (
+        db.table("pending_replies")
+        .select("*")
+        .eq("post_id", post_id)
+        .eq("status", "pending")
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def mark_reply_posted(db: Client, post_id: str, reply_id: str | None = None, reply_url: str | None = None) -> None:
+    updates = {"status": "posted"}
+    if reply_id:
+        updates["reply_id"] = reply_id
+    if reply_url:
+        updates["reply_url"] = reply_url
+    db.table("pending_replies").update(updates).eq("post_id", post_id).eq("status", "pending").execute()
+
+
+def mark_reply_rejected(db: Client, post_id: str) -> None:
+    db.table("pending_replies").update({"status": "rejected"}).eq("post_id", post_id).eq("status", "pending").execute()
+
+
 def record_activity(db: Client, event_type: str, handle: str, post_id: str | None, message: str) -> None:
     db.table("activity_log").insert(
         {
