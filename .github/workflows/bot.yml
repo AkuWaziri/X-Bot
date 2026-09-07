@@ -18,15 +18,31 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Validate configuration
+      - name: Send Telegram test feed
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python - <<'PY'
           import os
-          for name in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
-              if not os.getenv(name):
-                  raise SystemExit(f"Missing GitHub secret: {name}")
-          print("Telegram secrets are configured.")
+          import urllib.parse
+          import urllib.request
+
+          token = os.environ["TELEGRAM_BOT_TOKEN"]
+          chat_id = os.environ["TELEGRAM_CHAT_ID"]
+          message = (
+              "🟢 X-Bot ONLINE\n\n"
+              "GitHub → Telegram connection is working.\n"
+              "The monitoring engine is ready for the next phase."
+          )
+
+          url = f"https://api.telegram.org/bot{token}/sendMessage"
+          data = urllib.parse.urlencode({"chat_id": chat_id, "text": message}).encode()
+          request = urllib.request.Request(url, data=data, method="POST")
+
+          with urllib.request.urlopen(request, timeout=20) as response:
+              body = response.read().decode()
+              if '"ok":true' not in body:
+                  raise SystemExit(f"Telegram rejected the message: {body}")
+              print("Telegram test feed sent successfully.")
           PY
