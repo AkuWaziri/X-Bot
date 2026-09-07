@@ -29,19 +29,25 @@ def save_post(db: Client, post) -> None:
     ).execute()
 
 
-def save_pending_reply(
+def save_pending_replies(
     db: Client,
     post_id: str,
     handle: str,
     post_text: str,
-    suggested_reply: str,
+    replies: list[str],
 ) -> None:
+    if len(replies) != 3:
+        raise ValueError("Exactly three replies are required")
+
     db.table("pending_replies").upsert(
         {
             "post_id": post_id,
             "handle": handle,
             "post_text": post_text,
-            "suggested_reply": suggested_reply,
+            "reply_1": replies[0],
+            "reply_2": replies[1],
+            "reply_3": replies[2],
+            "selected_reply": None,
             "status": "pending",
         },
         on_conflict="post_id",
@@ -60,13 +66,21 @@ def get_pending_reply(db: Client, post_id: str) -> dict | None:
     return result.data[0] if result.data else None
 
 
+def mark_reply_selected(db: Client, post_id: str, reply_number: int) -> None:
+    if reply_number not in (1, 2, 3):
+        raise ValueError("Reply number must be 1, 2, or 3")
+    db.table("pending_replies").update(
+        {"selected_reply": reply_number, "status": "selected"}
+    ).eq("post_id", post_id).eq("status", "pending").execute()
+
+
 def mark_reply_posted(db: Client, post_id: str, reply_id: str | None = None, reply_url: str | None = None) -> None:
     updates = {"status": "posted"}
     if reply_id:
         updates["reply_id"] = reply_id
     if reply_url:
         updates["reply_url"] = reply_url
-    db.table("pending_replies").update(updates).eq("post_id", post_id).eq("status", "pending").execute()
+    db.table("pending_replies").update(updates).eq("post_id", post_id).eq("status", "selected").execute()
 
 
 def mark_reply_rejected(db: Client, post_id: str) -> None:
