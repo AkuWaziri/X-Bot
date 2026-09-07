@@ -1,11 +1,8 @@
-import json
 import re
-import urllib.error
-import urllib.request
+
+from groq import Groq
 
 from bot.config import GROQ_API_KEY, GROQ_MODEL, MAX_REPLY_CHARS, MIN_REPLY_CHARS
-
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 SYSTEM_PROMPT = f"""You write replies for a real person on X.
 
@@ -38,41 +35,22 @@ def generate_reply(post_text: str) -> str | None:
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is not configured")
 
-    payload = {
-        "model": GROQ_MODEL,
-        "temperature": 0.85,
-        "max_tokens": 100,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Post:\n{post_text}\n\nReply:"},
-        ],
-    }
-
-    request = urllib.request.Request(
-        GROQ_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        method="POST",
-    )
+    client = Groq(api_key=GROQ_API_KEY)
 
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Groq HTTP {exc.code}: {body[:500]}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Groq connection error: {exc.reason}") from exc
+        completion = client.chat.completions.create(
+            model=GROQ_MODEL,
+            temperature=0.85,
+            max_completion_tokens=100,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Post:\n{post_text}\n\nReply:"},
+            ],
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Groq request failed: {exc}") from exc
 
-    choices = result.get("choices", [])
-    if not choices:
-        return None
-
-    reply = _clean_reply(str(choices[0].get("message", {}).get("content", "")))
+    reply = _clean_reply(completion.choices[0].message.content or "")
 
     if reply.upper() == "NO_REPLY":
         return None
