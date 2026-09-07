@@ -26,6 +26,27 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Check Telegram webhook
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          token = os.environ["TELEGRAM_BOT_TOKEN"]
+          url = f"https://api.telegram.org/bot{token}/getWebhookInfo"
+          with urllib.request.urlopen(url, timeout=20) as response:
+              data = json.load(response)
+
+          info = data.get("result", {})
+          print("Telegram webhook configured:", bool(info.get("url")))
+          print("Pending updates:", info.get("pending_update_count", 0))
+          if info.get("last_error_message"):
+              print("Last webhook error:", info["last_error_message"])
+          PY
+
       - name: Process Telegram approvals
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
