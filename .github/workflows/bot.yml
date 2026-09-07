@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   schedule:
     # GitHub Actions cron uses UTC.
-    # Run every 15 minutes so Telegram approvals are processed promptly.
-    - cron: "*/15 * * * *"
+    # Run at 10:00, 15:00, and 20:00 UTC.
+    - cron: "0 10,15,20 * * *"
 
 concurrency:
   group: x-bot-monitor
