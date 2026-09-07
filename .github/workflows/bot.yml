@@ -3,8 +3,8 @@ name: X-Bot
 on:
   workflow_dispatch:
   schedule:
-    # GitHub Actions cron uses UTC.
-    # Run at 10:00, 15:00, and 20:00 UTC.
+    # Approval checks every 5 minutes; monitoring runs only at 10:00, 15:00, and 20:00 UTC.
+    - cron: "*/5 * * * *"
     - cron: "0 10,15,20 * * *"
 
 concurrency:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  monitor:
+  approvals:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -54,6 +54,21 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: python -m bot.telegram_commands
+
+  monitor:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 10,15,20 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       - name: Run monitoring cycle
         env:
