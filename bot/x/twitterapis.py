@@ -62,6 +62,30 @@ class TwitterAPIsProvider(XProvider):
                 f"TwitterAPIs connection error: {exc.reason}"
             ) from exc
 
+    @staticmethod
+    def _to_post(tweet: dict[str, Any]) -> Post | None:
+        tweet_id = str(tweet.get("id", ""))
+        text = str(tweet.get("text", "")).strip()
+        username = str(tweet.get("username") or tweet.get("user", {}).get("username") or "").strip()
+
+        if not tweet_id or not text or not username:
+            return None
+        if tweet.get("is_retweet") or tweet.get("is_reply"):
+            return None
+
+        post_url = tweet.get("url")
+        if not post_url:
+            post_url = f"https://x.com/{username}/status/{tweet_id}"
+
+        return Post(
+            id=tweet_id,
+            text=text,
+            username=username,
+            created_at=tweet.get("created_at"),
+            url=post_url,
+            raw=tweet,
+        )
+
     def get_latest_posts(self, handle: str, limit: int = 20) -> list[Post]:
         username = handle.lstrip("@").strip()
         payload = self._request("GET", "user/tweets", params={"username": username})
@@ -70,29 +94,25 @@ class TwitterAPIsProvider(XProvider):
         posts: list[Post] = []
 
         for tweet in tweets[:limit]:
-            if tweet.get("is_retweet") or tweet.get("is_reply"):
-                continue
+            post = self._to_post(tweet)
+            if post:
+                posts.append(post)
 
-            tweet_id = str(tweet.get("id", ""))
-            text = str(tweet.get("text", "")).strip()
-            if not tweet_id or not text:
-                continue
+        return posts
 
-            post_url = tweet.get("url")
-            if not post_url:
-                post_url = f"https://x.com/{username}/status/{tweet_id}"
+    def search_posts(self, query: str, limit: int = 20) -> list[Post]:
+        payload = self._request(
+            "GET",
+            "tweet/advanced_search",
+            params={"query": query, "product": "Latest"},
+        )
 
-            posts.append(
-                Post(
-                    id=tweet_id,
-                    text=text,
-                    username=username,
-                    created_at=tweet.get("created_at"),
-                    url=post_url,
-                    raw=tweet,
-                )
-            )
-
+        tweets = payload.get("tweets", [])
+        posts: list[Post] = []
+        for tweet in tweets[:limit]:
+            post = self._to_post(tweet)
+            if post:
+                posts.append(post)
         return posts
 
     def create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
