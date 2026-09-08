@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 MONITORED_HANDLES_PER_RUN = 8
 MAX_DISCOVERY_POSTS_PER_RUN = 2
-SCHEDULE_HOURS_UTC = (10, 15, 20)
+SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (18, 30))
 
 
 def telegram_already_sent(db, post_id: str) -> bool:
@@ -44,13 +44,19 @@ def _schedule_start(now: datetime) -> datetime:
         return now - timedelta(minutes=minutes)
 
     configured = os.getenv("SCHEDULE_SLOT", "").strip()
-    if configured in {"10", "15", "20"}:
-        hour = int(configured)
+    configured_times = {"11": (11, 0), "14": (14, 0), "18:30": (18, 30)}
+    if configured in configured_times:
+        hour, minute = configured_times[configured]
     else:
-        hour = max((h for h in SCHEDULE_HOURS_UTC if h <= now.hour), default=10)
-        if now.hour < 10:
-            hour = 10
-    return now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        current_minutes = now.hour * 60 + now.minute
+        eligible = [
+            (hour, minute)
+            for hour, minute in SCHEDULE_TIMES_UTC
+            if hour * 60 + minute <= current_minutes
+        ]
+        hour, minute = eligible[-1] if eligible else SCHEDULE_TIMES_UTC[-1]
+
+    return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
 
 def _parse_created_at(value: str | None) -> datetime | None:
@@ -62,14 +68,11 @@ def _parse_created_at(value: str | None) -> datetime | None:
     if not raw:
         return None
 
-    # ISO-8601, including trailing Z.
     try:
         created = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
         created = None
 
-    # Twitter/X timeline format, e.g.:
-    # Tue Feb 20 14:02:11 +0000 2026
     if created is None:
         try:
             created = datetime.strptime(raw, "%a %b %d %H:%M:%S %z %Y")
