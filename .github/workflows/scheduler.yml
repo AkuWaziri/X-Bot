@@ -1,10 +1,22 @@
 name: X-Bot Scheduler
 
 on:
+  # GitHub scheduled workflows can be delayed or dropped during load.
+  # Each slot therefore gets four trigger opportunities. The bot itself
+  # records a completed slot in Supabase, so fallback triggers are harmless.
   schedule:
     - cron: "0 11 * * *"
+    - cron: "5 11 * * *"
+    - cron: "10 11 * * *"
+    - cron: "15 11 * * *"
     - cron: "0 14 * * *"
+    - cron: "5 14 * * *"
+    - cron: "10 14 * * *"
+    - cron: "15 14 * * *"
     - cron: "30 18 * * *"
+    - cron: "35 18 * * *"
+    - cron: "40 18 * * *"
+    - cron: "45 18 * * *"
   workflow_dispatch:
 
 concurrency:
