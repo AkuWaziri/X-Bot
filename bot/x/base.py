@@ -18,5 +18,8 @@ class XProvider:
     def get_latest_posts(self, handle: str, limit: int = 20) -> list[Post]:
         raise NotImplementedError
 
+    def search_posts(self, query: str, limit: int = 20) -> list[Post]:
+        raise NotImplementedError
+
     def create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
         raise NotImplementedError
