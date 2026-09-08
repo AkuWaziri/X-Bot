@@ -181,7 +181,6 @@ def run_monitor_cycle() -> None:
     schedule_start = _schedule_start(now)
 
     logger.info("Schedule window: %s → %s UTC", schedule_start.isoformat(), now.isoformat())
-    _select_handles(accounts)
     handles = _select_handles(accounts)
     for handle in handles:
         _process_handle(db, provider, handle, schedule_start, now)
