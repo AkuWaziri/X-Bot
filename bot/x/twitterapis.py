@@ -66,7 +66,14 @@ class TwitterAPIsProvider(XProvider):
     def _to_post(tweet: dict[str, Any]) -> Post | None:
         tweet_id = str(tweet.get("id", ""))
         text = str(tweet.get("text", "")).strip()
-        username = str(tweet.get("username") or tweet.get("user", {}).get("username") or "").strip()
+        author = tweet.get("author") or {}
+        user = tweet.get("user") or {}
+        username = str(
+            tweet.get("username")
+            or author.get("username")
+            or user.get("username")
+            or ""
+        ).strip()
 
         if not tweet_id or not text or not username:
             return None
