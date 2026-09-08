@@ -53,20 +53,39 @@ def _schedule_start(now: datetime) -> datetime:
     return now.replace(hour=hour, minute=0, second=0, microsecond=0)
 
 
-def _is_recent_for_schedule(post, schedule_start: datetime, now: datetime) -> bool:
-    if not post.created_at:
-        return False
+def _parse_created_at(value: str | None) -> datetime | None:
+    """Parse TwitterAPIs timestamps in both ISO-8601 and X's native format."""
+    if not value:
+        return None
 
-    raw = str(post.created_at).strip()
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    # ISO-8601, including trailing Z.
     try:
         created = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
-        logger.warning("Unable to parse post timestamp: %r", post.created_at)
-        return False
+        created = None
+
+    # Twitter/X timeline format, e.g.:
+    # Tue Feb 20 14:02:11 +0000 2026
+    if created is None:
+        try:
+            created = datetime.strptime(raw, "%a %b %d %H:%M:%S %z %Y")
+        except ValueError:
+            logger.warning("Unable to parse post timestamp: %r", value)
+            return None
 
     if created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
-    created = created.astimezone(timezone.utc)
+    return created.astimezone(timezone.utc)
+
+
+def _is_recent_for_schedule(post, schedule_start: datetime, now: datetime) -> bool:
+    created = _parse_created_at(post.created_at)
+    if created is None:
+        return False
 
     return schedule_start <= created <= now and created.date() == now.date()
 
@@ -75,7 +94,11 @@ def _select_handles(accounts: list[str]) -> list[str]:
     candidates = list(accounts)
     random.shuffle(candidates)
     selected = candidates[: min(MONITORED_HANDLES_PER_RUN, len(candidates))]
-    logger.info("Selected %d monitored handles for this schedule: %s", len(selected), ", ".join(selected))
+    logger.info(
+        "Selected %d monitored handles for this schedule: %s",
+        len(selected),
+        ", ".join(selected),
+    )
     return selected
 
 
@@ -102,22 +125,49 @@ def _process_post(db, post, handle: str, *, source: str) -> bool:
     if not replies:
         return False
 
-    record_activity(db, "replies_suggested", handle, post.id, f"Three reply suggestions generated from {source}")
+    record_activity(
+        db,
+        "replies_suggested",
+        handle,
+        post.id,
+        f"Three reply suggestions generated from {source}",
+    )
 
     if AUTO_REPLY:
-        logger.warning("AUTO_REPLY is enabled but manual three-choice mode is required; skipping automatic post for %s", post.id)
+        logger.warning(
+            "AUTO_REPLY is enabled but manual three-choice mode is required; skipping automatic post for %s",
+            post.id,
+        )
     else:
         save_pending_replies(db, post.id, handle, post.text, replies)
 
     try:
         if telegram_already_sent(db, post.id):
             return False
-        send_new_post(handle, post.text, post.url, suggested_replies=replies, post_id=post.id)
-        record_activity(db, "telegram_sent", handle, post.id, f"Post notification sent to Telegram from {source}")
+        send_new_post(
+            handle,
+            post.text,
+            post.url,
+            suggested_replies=replies,
+            post_id=post.id,
+        )
+        record_activity(
+            db,
+            "telegram_sent",
+            handle,
+            post.id,
+            f"Post notification sent to Telegram from {source}",
+        )
         return True
     except Exception:
         logger.exception("Failed to send Telegram notification for %s", post.id)
-        record_activity(db, "error", handle, post.id, f"Failed to send Telegram notification from {source}")
+        record_activity(
+            db,
+            "error",
+            handle,
+            post.id,
+            f"Failed to send Telegram notification from {source}",
+        )
         return False
 
 
@@ -135,8 +185,21 @@ def _process_handle(db, provider, handle: str, schedule_start: datetime, now: da
         return
 
     post = posts[0]
+    parsed = _parse_created_at(post.created_at)
+    logger.info(
+        "LATEST | %s | id=%s | created_at=%r | parsed_utc=%s",
+        handle,
+        post.id,
+        post.created_at,
+        parsed.isoformat() if parsed else "INVALID",
+    )
+
     if not _is_recent_for_schedule(post, schedule_start, now):
-        logger.info("NO FEED | %s | latest post is outside schedule window: %s", handle, post.created_at)
+        logger.info(
+            "NO FEED | %s | latest post is outside schedule window: %s",
+            handle,
+            post.created_at,
+        )
         return
 
     _process_post(db, post, handle, source="monitored account")
@@ -152,7 +215,11 @@ def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, 
     sent = 0
     for post, topic, score in candidates:
         if not _is_recent_for_schedule(post, schedule_start, now):
-            logger.info("NO DISCOVERY FEED | %s | outside schedule window: %s", post.username, post.created_at)
+            logger.info(
+                "NO DISCOVERY FEED | %s | outside schedule window: %s",
+                post.username,
+                post.created_at,
+            )
             continue
 
         author = post.username.lstrip("@").lower()
@@ -162,7 +229,13 @@ def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, 
         handle = f"@{post.username.lstrip('@')}"
         logger.info("DISCOVERY | %s | score=%d | %s", topic, score, handle)
         if _process_post(db, post, handle, source=f"discovery:{topic}"):
-            record_activity(db, "discovery_processed", handle, post.id, f"Discovered reply opportunity from topic {topic} with score {score}")
+            record_activity(
+                db,
+                "discovery_processed",
+                handle,
+                post.id,
+                f"Discovered reply opportunity from topic {topic} with score {score}",
+            )
             used_authors.add(author)
             sent += 1
             if sent >= MAX_DISCOVERY_POSTS_PER_RUN:
@@ -180,7 +253,11 @@ def run_monitor_cycle() -> None:
     now = datetime.now(timezone.utc)
     schedule_start = _schedule_start(now)
 
-    logger.info("Schedule window: %s → %s UTC", schedule_start.isoformat(), now.isoformat())
+    logger.info(
+        "Schedule window: %s → %s UTC",
+        schedule_start.isoformat(),
+        now.isoformat(),
+    )
     handles = _select_handles(accounts)
     for handle in handles:
         _process_handle(db, provider, handle, schedule_start, now)
@@ -189,5 +266,8 @@ def run_monitor_cycle() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        level=logging.INFO,
+    )
     run_monitor_cycle()
