@@ -24,12 +24,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest
 
       - name: Run regression tests
         env:
           TELEGRAM_BOT_TOKEN: "test-token"
-        run: python -m unittest discover -s tests -p "test_*.py" -v
+        run: pytest -q
 
       - name: Run monitoring cycle
         env:
