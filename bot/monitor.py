@@ -19,7 +19,6 @@ from bot.x.provider import get_x_provider
 
 logger = logging.getLogger(__name__)
 
-# Exactly 8 monitored-account slots and up to 2 discovery slots per schedule.
 MONITORED_HANDLES_PER_RUN = 8
 MAX_DISCOVERY_POSTS_PER_RUN = 2
 SCHEDULE_HOURS_UTC = (10, 15, 20)
@@ -39,18 +38,15 @@ def telegram_already_sent(db, post_id: str) -> bool:
 
 def _schedule_start(now: datetime) -> datetime:
     """Return the start of the active monitoring window in UTC."""
-    if os.getenv("TEST_MODE", "false").strip().lower() == "true":
-        try:
-            minutes = max(1, int(os.getenv("TEST_WINDOW_MINUTES", "60")))
-        except ValueError:
-            minutes = 60
+    test_mode = os.getenv("TEST_MODE", "").strip().lower() == "true"
+    if test_mode:
+        minutes = int(os.getenv("TEST_WINDOW_MINUTES", "10"))
         return now - timedelta(minutes=minutes)
 
     configured = os.getenv("SCHEDULE_SLOT", "").strip()
     if configured in {"10", "15", "20"}:
         hour = int(configured)
     else:
-        # Useful for manual production-style workflow runs: use the most recent slot.
         hour = max((h for h in SCHEDULE_HOURS_UTC if h <= now.hour), default=10)
         if now.hour < 10:
             hour = 10
@@ -58,7 +54,6 @@ def _schedule_start(now: datetime) -> datetime:
 
 
 def _is_recent_for_schedule(post, schedule_start: datetime, now: datetime) -> bool:
-    """Accept only posts from today and inside the active monitoring window."""
     if not post.created_at:
         return False
 
@@ -77,20 +72,14 @@ def _is_recent_for_schedule(post, schedule_start: datetime, now: datetime) -> bo
 
 
 def _select_handles(accounts: list[str]) -> list[str]:
-    """Freshly reshuffle the full monitored pool every schedule; select exactly 8 when possible."""
     candidates = list(accounts)
     random.shuffle(candidates)
     selected = candidates[: min(MONITORED_HANDLES_PER_RUN, len(candidates))]
-    logger.info(
-        "Selected %d monitored handles for this schedule: %s",
-        len(selected),
-        ", ".join(selected),
-    )
+    logger.info("Selected %d monitored handles for this schedule: %s", len(selected), ", ".join(selected))
     return selected
 
 
 def _process_post(db, post, handle: str, *, source: str) -> bool:
-    """Generate three replies and deliver the post/options to Telegram."""
     if post_seen(db, post.id) and telegram_already_sent(db, post.id):
         logger.info("SEEN | %s | %s", handle, post.id)
         return False
@@ -113,50 +102,22 @@ def _process_post(db, post, handle: str, *, source: str) -> bool:
     if not replies:
         return False
 
-    record_activity(
-        db,
-        "replies_suggested",
-        handle,
-        post.id,
-        f"Three reply suggestions generated from {source}",
-    )
+    record_activity(db, "replies_suggested", handle, post.id, f"Three reply suggestions generated from {source}")
 
     if AUTO_REPLY:
-        logger.warning(
-            "AUTO_REPLY is enabled but manual three-choice mode is required; skipping automatic post for %s",
-            post.id,
-        )
+        logger.warning("AUTO_REPLY is enabled but manual three-choice mode is required; skipping automatic post for %s", post.id)
     else:
         save_pending_replies(db, post.id, handle, post.text, replies)
 
     try:
         if telegram_already_sent(db, post.id):
             return False
-
-        send_new_post(
-            handle,
-            post.text,
-            post.url,
-            suggested_replies=replies,
-            post_id=post.id,
-        )
-        record_activity(
-            db,
-            "telegram_sent",
-            handle,
-            post.id,
-            f"Post notification sent to Telegram from {source}",
-        )
+        send_new_post(handle, post.text, post.url, suggested_replies=replies, post_id=post.id)
+        record_activity(db, "telegram_sent", handle, post.id, f"Post notification sent to Telegram from {source}")
         return True
     except Exception:
         logger.exception("Failed to send Telegram notification for %s", post.id)
-        record_activity(
-            db,
-            "error",
-            handle,
-            post.id,
-            f"Failed to send Telegram notification from {source}",
-        )
+        record_activity(db, "error", handle, post.id, f"Failed to send Telegram notification from {source}")
         return False
 
 
@@ -169,64 +130,39 @@ def _process_handle(db, provider, handle: str, schedule_start: datetime, now: da
         return
 
     logger.info("Fetched %d latest post for %s", len(posts), handle)
-
     if not posts:
         logger.info("NO FEED | %s | no post returned", handle)
         return
 
     post = posts[0]
     if not _is_recent_for_schedule(post, schedule_start, now):
-        logger.info(
-            "NO FEED | %s | latest post is outside schedule window: %s",
-            handle,
-            post.created_at,
-        )
+        logger.info("NO FEED | %s | latest post is outside schedule window: %s", handle, post.created_at)
         return
 
     _process_post(db, post, handle, source="monitored account")
 
 
 def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, now: datetime) -> None:
-    """Find up to two strong posts from non-monitored accounts inside this window."""
-    candidates = discover_posts(
-        provider,
-        accounts,
-        max_posts=MAX_DISCOVERY_POSTS_PER_RUN,
-    )
-
+    candidates = discover_posts(provider, accounts, max_posts=MAX_DISCOVERY_POSTS_PER_RUN)
     if not candidates:
         logger.info("Discovery found no qualifying non-monitored posts.")
         return
 
     used_authors: set[str] = set()
     sent = 0
-
     for post, topic, score in candidates:
         if not _is_recent_for_schedule(post, schedule_start, now):
-            logger.info(
-                "NO DISCOVERY FEED | %s | outside schedule window: %s",
-                post.username,
-                post.created_at,
-            )
+            logger.info("NO DISCOVERY FEED | %s | outside schedule window: %s", post.username, post.created_at)
             continue
 
         author = post.username.lstrip("@").lower()
-        if author in used_authors:
-            continue
-        if post_seen(db, post.id):
+        if author in used_authors or post_seen(db, post.id):
             continue
 
         handle = f"@{post.username.lstrip('@')}"
         logger.info("DISCOVERY | %s | score=%d | %s", topic, score, handle)
-
         if _process_post(db, post, handle, source=f"discovery:{topic}"):
-            record_activity(
-                db,
-                "discovery_processed",
-                handle,
-                post.id,
-                f"Discovered reply opportunity from topic {topic} with score {score}",
-            )
+            record_activity(db, "discovery_processed", handle, post.id, f"Discovered reply opportunity from topic {topic} with score {score}")
             used_authors.add(author)
             sent += 1
             if sent >= MAX_DISCOVERY_POSTS_PER_RUN:
@@ -243,28 +179,16 @@ def run_monitor_cycle() -> None:
     db = get_db()
     now = datetime.now(timezone.utc)
     schedule_start = _schedule_start(now)
-    test_mode = os.getenv("TEST_MODE", "false").strip().lower() == "true"
 
-    logger.info(
-        "%s window: %s → %s UTC",
-        "TEST" if test_mode else "Schedule",
-        schedule_start.isoformat(),
-        now.isoformat(),
-    )
-
-    # Fresh random selection every schedule. A handle can qualify again later today
-    # if it is reshuffled and has a new post inside that later schedule window.
+    logger.info("Schedule window: %s → %s UTC", schedule_start.isoformat(), now.isoformat())
+    _select_handles(accounts)
     handles = _select_handles(accounts)
     for handle in handles:
         _process_handle(db, provider, handle, schedule_start, now)
 
-    # Exactly two discovery slots maximum, subject to the same freshness rule.
     _run_discovery(db, provider, accounts, schedule_start, now)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        level=logging.INFO,
-    )
+    logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
     run_monitor_cycle()
