@@ -38,36 +38,34 @@ def _used_handles_today(db) -> set[str]:
         .select("handle")
         .eq("event_type", "handle_replied")
         .gte("created_at", f"{today}T00:00:00+00:00")
-        .lt("created_at", f"{today}T00:00:00+00:00".replace("T00:00:00+00:00", "T23:59:59.999999+00:00"))
+        .lt("created_at", f"{today}T23:59:59.999999+00:00")
         .execute()
     )
     return {row["handle"].lower() for row in (result.data or []) if row.get("handle")}
 
 
-def _select_handle(db, accounts: list[str]) -> str | None:
-    """Randomly select one handle not yet used successfully today."""
+def _select_handles(db, accounts: list[str]) -> list[str]:
+    """Randomly select 5-10 handles that have not been used successfully today."""
     used = _used_handles_today(db)
     eligible = [handle for handle in accounts if handle.lower() not in used]
+
     if not eligible:
         logger.info("All monitored handles have been used today.")
-        return None
+        return []
+
     random.shuffle(eligible)
-    return eligible[0]
+    count = min(len(eligible), random.randint(5, 10))
+    selected = eligible[:count]
+
+    logger.info(
+        "Selected %d handles for this monitor schedule: %s",
+        len(selected),
+        ", ".join(selected),
+    )
+    return selected
 
 
-def run_monitor_cycle() -> None:
-    accounts = load_accounts()
-    if not accounts:
-        logger.info("No monitored X accounts configured.")
-        return
-
-    provider = get_x_provider()
-    db = get_db()
-
-    handle = _select_handle(db, accounts)
-    if not handle:
-        return
-
+def _process_handle(db, provider, handle: str) -> None:
     try:
         posts = provider.get_latest_posts(handle, limit=1)
     except Exception:
@@ -163,6 +161,23 @@ def run_monitor_cycle() -> None:
             post.id,
             "Failed to send latest post notification for randomized rotation",
         )
+
+
+def run_monitor_cycle() -> None:
+    accounts = load_accounts()
+    if not accounts:
+        logger.info("No monitored X accounts configured.")
+        return
+
+    provider = get_x_provider()
+    db = get_db()
+
+    handles = _select_handles(db, accounts)
+    if not handles:
+        return
+
+    for handle in handles:
+        _process_handle(db, provider, handle)
 
 
 if __name__ == "__main__":
