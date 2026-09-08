@@ -6,7 +6,7 @@ ACCOUNTS_FILE = Path(__file__).resolve().parent.parent / "config" / "monitored_a
 
 
 def load_accounts() -> list[str]:
-    """Load enabled monitored X handles from the repository config."""
+    """Load enabled monitored X handles, normalized and deduplicated."""
     if not ACCOUNTS_FILE.exists():
         return []
 
@@ -14,7 +14,17 @@ def load_accounts() -> list[str]:
         data = json.load(file)
 
     accounts = data.get("accounts", [])
-    return [normalize_handle(handle) for handle in accounts if normalize_handle(handle)]
+    normalized: list[str] = []
+    seen: set[str] = set()
+
+    for handle in accounts:
+        value = normalize_handle(handle)
+        key = value.lower()
+        if value and key not in seen:
+            normalized.append(value)
+            seen.add(key)
+
+    return normalized
 
 
 def normalize_handle(handle: str) -> str:
