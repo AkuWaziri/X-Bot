@@ -97,13 +97,19 @@ class TwitterAPIsProvider(XProvider):
         username = handle.lstrip("@").strip()
         payload = self._request("GET", "user/tweets", params={"username": username})
 
-        tweets = payload.get("tweets", [])
+        tweets = payload.get("tweets") or []
         posts: list[Post] = []
 
-        for tweet in tweets[:limit]:
+        # The timeline can contain replies/retweets. Filter first, then apply
+        # the requested post limit, otherwise a filtered first item can produce
+        # a false empty result for limit=1.
+        for tweet in tweets:
             post = self._to_post(tweet)
-            if post:
-                posts.append(post)
+            if not post:
+                continue
+            posts.append(post)
+            if len(posts) >= limit:
+                break
 
         return posts
 
@@ -114,12 +120,15 @@ class TwitterAPIsProvider(XProvider):
             params={"query": query, "product": "Latest"},
         )
 
-        tweets = payload.get("tweets", [])
+        tweets = payload.get("tweets") or []
         posts: list[Post] = []
-        for tweet in tweets[:limit]:
+        for tweet in tweets:
             post = self._to_post(tweet)
-            if post:
-                posts.append(post)
+            if not post:
+                continue
+            posts.append(post)
+            if len(posts) >= limit:
+                break
         return posts
 
     def create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
