@@ -70,6 +70,28 @@ def _engagement(post: Post) -> int:
     return total
 
 
+def _is_verified(post: Post) -> bool:
+    """Accept only X accounts carrying a verified/check-mark signal."""
+    raw = post.raw or {}
+    author = raw.get("author") or raw.get("user") or {}
+
+    values = (
+        raw.get("verified"),
+        raw.get("is_verified"),
+        raw.get("verified_type"),
+        author.get("verified"),
+        author.get("is_verified"),
+        author.get("verified_type"),
+    )
+
+    for value in values:
+        if isinstance(value, bool) and value:
+            return True
+        if isinstance(value, str) and value.strip().lower() not in {"", "false", "none", "null"}:
+            return True
+    return False
+
+
 def _score(post: Post, topic: DiscoveryTopic) -> int:
     text = post.text.lower()
     score = 0
@@ -105,9 +127,9 @@ def _score(post: Post, topic: DiscoveryTopic) -> int:
 def discover_posts(
     provider: XProvider,
     monitored_handles: list[str],
-    max_posts: int = 3,
+    max_posts: int = 2,
 ) -> list[tuple[Post, str, int]]:
-    """Find a small number of high-quality posts from non-monitored accounts."""
+    """Find up to two random, verified posts from non-monitored accounts."""
     topics = list(DISCOVERY_TOPICS)
     random.shuffle(topics)
     selected_topics = topics[:2]
@@ -125,6 +147,8 @@ def discover_posts(
             username = post.username.lstrip("@").lower()
             if not username or username in monitored:
                 continue
+            if not _is_verified(post):
+                continue
             if not post.text.strip():
                 continue
             if re.fullmatch(r"https?://\S+", post.text.strip()):
@@ -139,10 +163,8 @@ def discover_posts(
             if current is None or score > current[2]:
                 candidates[post.id] = candidate
 
-    ranked = sorted(candidates.values(), key=lambda item: item[2], reverse=True)
-
-    # Keep discovery varied instead of always taking the exact same top posts.
-    shortlist = ranked[: min(len(ranked), max_posts * 3)]
-    random.shuffle(shortlist)
-    shortlist.sort(key=lambda item: item[2], reverse=True)
-    return shortlist[:max_posts]
+    # Randomly choose the discovery posts from the qualifying pool.
+    # No ranking preference is used for the final selection.
+    pool = list(candidates.values())
+    random.shuffle(pool)
+    return pool[: min(max_posts, len(pool))]
