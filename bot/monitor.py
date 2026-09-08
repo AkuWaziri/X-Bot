@@ -11,11 +11,16 @@ from bot.db import (
     save_pending_replies,
     save_post,
 )
+from bot.discovery import discover_posts
 from bot.reply_engine import generate_replies, validate_replies
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
 
 logger = logging.getLogger(__name__)
+
+
+# Discovery is intentionally smaller than the monitored-account pool.
+MAX_DISCOVERY_POSTS_PER_RUN = 3
 
 
 def telegram_already_sent(db, post_id: str) -> bool:
@@ -31,7 +36,7 @@ def telegram_already_sent(db, post_id: str) -> bool:
 
 
 def _used_handles_today(db) -> set[str]:
-    """Return handles that successfully completed a reply cycle today (UTC)."""
+    """Return monitored handles that successfully completed a reply cycle today (UTC)."""
     today = datetime.now(timezone.utc).date().isoformat()
     result = (
         db.table("activity_log")
@@ -45,7 +50,7 @@ def _used_handles_today(db) -> set[str]:
 
 
 def _select_handles(db, accounts: list[str]) -> list[str]:
-    """Randomly select 5-10 handles that have not been used successfully today."""
+    """Randomly select 5-10 monitored handles that have not been used successfully today."""
     used = _used_handles_today(db)
     eligible = [handle for handle in accounts if handle.lower() not in used]
 
@@ -58,32 +63,18 @@ def _select_handles(db, accounts: list[str]) -> list[str]:
     selected = eligible[:count]
 
     logger.info(
-        "Selected %d handles for this monitor schedule: %s",
+        "Selected %d monitored handles for this schedule: %s",
         len(selected),
         ", ".join(selected),
     )
     return selected
 
 
-def _process_handle(db, provider, handle: str) -> None:
-    try:
-        posts = provider.get_latest_posts(handle, limit=1)
-    except Exception:
-        logger.exception("Failed to fetch post for %s", handle)
-        record_activity(db, "error", handle, None, "Failed to fetch latest post from X provider")
-        return
-
-    logger.info("Fetched %d latest post for %s", len(posts), handle)
-
-    if not posts:
-        logger.info("No post returned for %s", handle)
-        return
-
-    post = posts[0]
-
+def _process_post(db, post, handle: str, *, source: str) -> bool:
+    """Generate three replies and deliver the post/options to Telegram."""
     if post_seen(db, post.id) and telegram_already_sent(db, post.id):
         logger.info("SEEN | %s | %s", handle, post.id)
-        return
+        return False
 
     if not post_seen(db, post.id):
         save_post(db, post)
@@ -107,14 +98,14 @@ def _process_handle(db, provider, handle: str) -> None:
         replies = None
 
     if not replies:
-        return
+        return False
 
     record_activity(
         db,
         "replies_suggested",
         handle,
         post.id,
-        "Three reply suggestions generated",
+        f"Three reply suggestions generated from {source}",
     )
 
     if AUTO_REPLY:
@@ -127,7 +118,7 @@ def _process_handle(db, provider, handle: str) -> None:
 
     try:
         if telegram_already_sent(db, post.id):
-            return
+            return False
 
         send_new_post(
             handle,
@@ -141,17 +132,9 @@ def _process_handle(db, provider, handle: str) -> None:
             "telegram_sent",
             handle,
             post.id,
-            "Latest post notification sent to Telegram",
+            f"Post notification sent to Telegram from {source}",
         )
-
-        # Only mark the handle as used after the full reply cycle succeeds.
-        record_activity(
-            db,
-            "handle_replied",
-            handle,
-            post.id,
-            "Handle used for today's randomized reply rotation",
-        )
+        return True
     except Exception:
         logger.exception("Failed to send Telegram notification for %s", post.id)
         record_activity(
@@ -159,8 +142,80 @@ def _process_handle(db, provider, handle: str) -> None:
             "error",
             handle,
             post.id,
-            "Failed to send latest post notification for randomized rotation",
+            f"Failed to send Telegram notification from {source}",
         )
+        return False
+
+
+def _process_handle(db, provider, handle: str) -> None:
+    try:
+        posts = provider.get_latest_posts(handle, limit=1)
+    except Exception:
+        logger.exception("Failed to fetch post for %s", handle)
+        record_activity(db, "error", handle, None, "Failed to fetch latest post from X provider")
+        return
+
+    logger.info("Fetched %d latest post for %s", len(posts), handle)
+
+    if not posts:
+        logger.info("No post returned for %s", handle)
+        return
+
+    if _process_post(db, posts[0], handle, source="monitored account"):
+        # Only successful monitored cycles count toward the daily rotation.
+        record_activity(
+            db,
+            "handle_replied",
+            handle,
+            posts[0].id,
+            "Monitored handle used for today's randomized reply rotation",
+        )
+
+
+def _run_discovery(db, provider, accounts: list[str]) -> None:
+    """Find up to three reply opportunities outside the monitored handle list."""
+    candidates = discover_posts(
+        provider,
+        accounts,
+        max_posts=MAX_DISCOVERY_POSTS_PER_RUN,
+    )
+
+    if not candidates:
+        logger.info("Discovery found no qualifying non-monitored posts.")
+        return
+
+    logger.info("Discovery found %d qualifying non-monitored posts.", len(candidates))
+
+    used_authors: set[str] = set()
+    sent = 0
+
+    for post, topic, score in candidates:
+        author = post.username.lstrip("@").lower()
+        if author in used_authors:
+            continue
+        if post_seen(db, post.id):
+            continue
+
+        handle = f"@{post.username.lstrip('@')}"
+        logger.info(
+            "DISCOVERY | %s | score=%d | %s",
+            topic,
+            score,
+            handle,
+        )
+
+        if _process_post(db, post, handle, source=f"discovery:{topic}"):
+            record_activity(
+                db,
+                "discovery_processed",
+                handle,
+                post.id,
+                f"Discovered reply opportunity from topic {topic} with score {score}",
+            )
+            used_authors.add(author)
+            sent += 1
+            if sent >= MAX_DISCOVERY_POSTS_PER_RUN:
+                break
 
 
 def run_monitor_cycle() -> None:
@@ -172,12 +227,13 @@ def run_monitor_cycle() -> None:
     provider = get_x_provider()
     db = get_db()
 
+    # Core coverage: 5-10 deliberately monitored accounts.
     handles = _select_handles(db, accounts)
-    if not handles:
-        return
-
     for handle in handles:
         _process_handle(db, provider, handle)
+
+    # Opportunity coverage: up to 3 strong posts from accounts we did not add.
+    _run_discovery(db, provider, accounts)
 
 
 if __name__ == "__main__":
