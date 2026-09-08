@@ -3,9 +3,11 @@ name: X-Bot
 on:
   workflow_dispatch:
   schedule:
-    # Approval checks every 5 minutes; monitoring runs only at 10:00, 15:00, and 20:00 UTC.
+    # Approval checks every 5 minutes; monitoring runs at 10:00, 15:00, and 20:00 UTC.
     - cron: "*/5 * * * *"
-    - cron: "0 10,15,20 * * *"
+    - cron: "0 10 * * *"
+    - cron: "0 15 * * *"
+    - cron: "0 20 * * *"
 
 concurrency:
   group: x-bot-monitor
@@ -56,7 +58,11 @@ jobs:
         run: python -m bot.telegram_commands
 
   monitor:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 10,15,20 * * *'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 10 * * *' ||
+      github.event.schedule == '0 15 * * *' ||
+      github.event.schedule == '0 20 * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -79,5 +85,5 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           AUTO_REPLY: "false"
-          SCHEDULE_SLOT: ${{ github.event.schedule == '0 10,15,20 * * *' && '10' || '' }}
+          SCHEDULE_SLOT: ${{ github.event.schedule == '0 10 * * *' && '10' || github.event.schedule == '0 15 * * *' && '15' || github.event.schedule == '0 20 * * *' && '20' || '' }}
         run: python -m bot.monitor
