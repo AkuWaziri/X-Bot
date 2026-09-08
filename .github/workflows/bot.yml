@@ -3,8 +3,8 @@ name: X-Bot
 on:
   workflow_dispatch:
   schedule:
-    # TEMP TEST: monitoring every 5 minutes. Restore 10:00, 15:00, 20:00 UTC after test.
-    - cron: "*/5 * * * *"
+    # TEMP TEST ONLY: verify three consecutive 10-minute scheduler windows.
+    - cron: "*/10 * * * *"
 
 concurrency:
   group: x-bot-monitor
@@ -54,7 +54,7 @@ jobs:
   monitor:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.schedule == '*/5 * * * *'
+      github.event.schedule == '*/10 * * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -78,6 +78,6 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           AUTO_REPLY: "false"
           TEST_MODE: "true"
-          TEST_WINDOW_MINUTES: "60"
+          TEST_WINDOW_MINUTES: "10"
           SCHEDULE_SLOT: ""
         run: python -m bot.monitor
