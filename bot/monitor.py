@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 MONITORED_HANDLES_PER_RUN = 8
 MAX_DISCOVERY_POSTS_PER_RUN = 2
 SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (18, 30))
+SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 
 
 def telegram_already_sent(db, post_id: str) -> bool:
@@ -34,6 +35,34 @@ def telegram_already_sent(db, post_id: str) -> bool:
         .execute()
     )
     return bool(result.data)
+
+
+def _schedule_key(schedule_start: datetime) -> str:
+    return schedule_start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+
+
+def _schedule_already_processed(db, schedule_start: datetime) -> bool:
+    key = _schedule_key(schedule_start)
+    result = (
+        db.table("activity_log")
+        .select("id")
+        .eq("event_type", SCHEDULE_ACTIVITY_EVENT)
+        .eq("message", f"slot={key}")
+        .limit(1)
+        .execute()
+    )
+    return bool(result.data)
+
+
+def _mark_schedule_processed(db, schedule_start: datetime) -> None:
+    key = _schedule_key(schedule_start)
+    record_activity(
+        db,
+        SCHEDULE_ACTIVITY_EVENT,
+        "SYSTEM",
+        None,
+        f"slot={key}",
+    )
 
 
 def _schedule_start(now: datetime) -> datetime:
@@ -255,17 +284,25 @@ def run_monitor_cycle() -> None:
     db = get_db()
     now = datetime.now(timezone.utc)
     schedule_start = _schedule_start(now)
+    schedule_key = _schedule_key(schedule_start)
+
+    if _schedule_already_processed(db, schedule_start):
+        logger.info("SCHEDULE ALREADY PROCESSED | %s | exiting", schedule_key)
+        return
 
     logger.info(
-        "Schedule window: %s → %s UTC",
+        "Schedule window: %s → %s UTC | slot=%s",
         schedule_start.isoformat(),
         now.isoformat(),
+        schedule_key,
     )
     handles = _select_handles(accounts)
     for handle in handles:
         _process_handle(db, provider, handle, schedule_start, now)
 
     _run_discovery(db, provider, accounts, schedule_start, now)
+    _mark_schedule_processed(db, schedule_start)
+    logger.info("SCHEDULE COMPLETE | %s", schedule_key)
 
 
 if __name__ == "__main__":
