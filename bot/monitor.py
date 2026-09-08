@@ -1,7 +1,7 @@
 import logging
 import os
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from bot.accounts import load_accounts
 from bot.config import AUTO_REPLY
@@ -38,12 +38,19 @@ def telegram_already_sent(db, post_id: str) -> bool:
 
 
 def _schedule_start(now: datetime) -> datetime:
-    """Return the start of the current monitoring schedule window in UTC."""
+    """Return the start of the active monitoring window in UTC."""
+    if os.getenv("TEST_MODE", "false").strip().lower() == "true":
+        try:
+            minutes = max(1, int(os.getenv("TEST_WINDOW_MINUTES", "60")))
+        except ValueError:
+            minutes = 60
+        return now - timedelta(minutes=minutes)
+
     configured = os.getenv("SCHEDULE_SLOT", "").strip()
     if configured in {"10", "15", "20"}:
         hour = int(configured)
     else:
-        # Useful for manual workflow runs: use the most recent schedule slot today.
+        # Useful for manual production-style workflow runs: use the most recent slot.
         hour = max((h for h in SCHEDULE_HOURS_UTC if h <= now.hour), default=10)
         if now.hour < 10:
             hour = 10
@@ -51,7 +58,7 @@ def _schedule_start(now: datetime) -> datetime:
 
 
 def _is_recent_for_schedule(post, schedule_start: datetime, now: datetime) -> bool:
-    """Accept only posts from today and inside this schedule's time window."""
+    """Accept only posts from today and inside the active monitoring window."""
     if not post.created_at:
         return False
 
@@ -180,7 +187,7 @@ def _process_handle(db, provider, handle: str, schedule_start: datetime, now: da
 
 
 def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, now: datetime) -> None:
-    """Find up to two strong posts from non-monitored accounts inside this schedule window."""
+    """Find up to two strong posts from non-monitored accounts inside this window."""
     candidates = discover_posts(
         provider,
         accounts,
@@ -196,7 +203,11 @@ def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, 
 
     for post, topic, score in candidates:
         if not _is_recent_for_schedule(post, schedule_start, now):
-            logger.info("NO DISCOVERY FEED | %s | outside schedule window: %s", post.username, post.created_at)
+            logger.info(
+                "NO DISCOVERY FEED | %s | outside schedule window: %s",
+                post.username,
+                post.created_at,
+            )
             continue
 
         author = post.username.lstrip("@").lower()
@@ -232,9 +243,11 @@ def run_monitor_cycle() -> None:
     db = get_db()
     now = datetime.now(timezone.utc)
     schedule_start = _schedule_start(now)
+    test_mode = os.getenv("TEST_MODE", "false").strip().lower() == "true"
 
     logger.info(
-        "Schedule window: %s → %s UTC",
+        "%s window: %s → %s UTC",
+        "TEST" if test_mode else "Schedule",
         schedule_start.isoformat(),
         now.isoformat(),
     )
