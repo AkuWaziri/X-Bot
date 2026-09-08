@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 from datetime import datetime, timezone
 
@@ -18,9 +19,10 @@ from bot.x.provider import get_x_provider
 
 logger = logging.getLogger(__name__)
 
-
-# Discovery is intentionally smaller than the monitored-account pool.
-MAX_DISCOVERY_POSTS_PER_RUN = 3
+# Exactly 8 monitored-account slots and up to 2 discovery slots per schedule.
+MONITORED_HANDLES_PER_RUN = 8
+MAX_DISCOVERY_POSTS_PER_RUN = 2
+SCHEDULE_HOURS_UTC = (10, 15, 20)
 
 
 def telegram_already_sent(db, post_id: str) -> bool:
@@ -35,33 +37,43 @@ def telegram_already_sent(db, post_id: str) -> bool:
     return bool(result.data)
 
 
-def _used_handles_today(db) -> set[str]:
-    """Return monitored handles that successfully completed a reply cycle today (UTC)."""
-    today = datetime.now(timezone.utc).date().isoformat()
-    result = (
-        db.table("activity_log")
-        .select("handle")
-        .eq("event_type", "handle_replied")
-        .gte("created_at", f"{today}T00:00:00+00:00")
-        .lt("created_at", f"{today}T23:59:59.999999+00:00")
-        .execute()
-    )
-    return {row["handle"].lower() for row in (result.data or []) if row.get("handle")}
+def _schedule_start(now: datetime) -> datetime:
+    """Return the start of the current monitoring schedule window in UTC."""
+    configured = os.getenv("SCHEDULE_SLOT", "").strip()
+    if configured in {"10", "15", "20"}:
+        hour = int(configured)
+    else:
+        # Useful for manual workflow runs: use the most recent schedule slot today.
+        hour = max((h for h in SCHEDULE_HOURS_UTC if h <= now.hour), default=10)
+        if now.hour < 10:
+            hour = 10
+    return now.replace(hour=hour, minute=0, second=0, microsecond=0)
 
 
-def _select_handles(db, accounts: list[str]) -> list[str]:
-    """Randomly select 5-10 monitored handles that have not been used successfully today."""
-    used = _used_handles_today(db)
-    eligible = [handle for handle in accounts if handle.lower() not in used]
+def _is_recent_for_schedule(post, schedule_start: datetime, now: datetime) -> bool:
+    """Accept only posts from today and inside this schedule's time window."""
+    if not post.created_at:
+        return False
 
-    if not eligible:
-        logger.info("All monitored handles have been used today.")
-        return []
+    raw = str(post.created_at).strip()
+    try:
+        created = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning("Unable to parse post timestamp: %r", post.created_at)
+        return False
 
-    random.shuffle(eligible)
-    count = min(len(eligible), random.randint(5, 10))
-    selected = eligible[:count]
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    created = created.astimezone(timezone.utc)
 
+    return schedule_start <= created <= now and created.date() == now.date()
+
+
+def _select_handles(accounts: list[str]) -> list[str]:
+    """Freshly reshuffle the full monitored pool every schedule; select exactly 8 when possible."""
+    candidates = list(accounts)
+    random.shuffle(candidates)
+    selected = candidates[: min(MONITORED_HANDLES_PER_RUN, len(candidates))]
     logger.info(
         "Selected %d monitored handles for this schedule: %s",
         len(selected),
@@ -85,13 +97,7 @@ def _process_post(db, post, handle: str, *, source: str) -> bool:
         replies = generate_replies(post.text)
     except Exception:
         logger.exception("Failed to generate reply suggestions for %s", post.id)
-        record_activity(
-            db,
-            "error",
-            handle,
-            post.id,
-            "Failed to generate reply suggestions",
-        )
+        record_activity(db, "error", handle, post.id, "Failed to generate reply suggestions")
 
     if replies and not validate_replies(replies):
         logger.warning("Reply validation failed for %s: %r", post.id, replies)
@@ -147,7 +153,7 @@ def _process_post(db, post, handle: str, *, source: str) -> bool:
         return False
 
 
-def _process_handle(db, provider, handle: str) -> None:
+def _process_handle(db, provider, handle: str, schedule_start: datetime, now: datetime) -> None:
     try:
         posts = provider.get_latest_posts(handle, limit=1)
     except Exception:
@@ -158,22 +164,23 @@ def _process_handle(db, provider, handle: str) -> None:
     logger.info("Fetched %d latest post for %s", len(posts), handle)
 
     if not posts:
-        logger.info("No post returned for %s", handle)
+        logger.info("NO FEED | %s | no post returned", handle)
         return
 
-    if _process_post(db, posts[0], handle, source="monitored account"):
-        # Only successful monitored cycles count toward the daily rotation.
-        record_activity(
-            db,
-            "handle_replied",
+    post = posts[0]
+    if not _is_recent_for_schedule(post, schedule_start, now):
+        logger.info(
+            "NO FEED | %s | latest post is outside schedule window: %s",
             handle,
-            posts[0].id,
-            "Monitored handle used for today's randomized reply rotation",
+            post.created_at,
         )
+        return
+
+    _process_post(db, post, handle, source="monitored account")
 
 
-def _run_discovery(db, provider, accounts: list[str]) -> None:
-    """Find up to three reply opportunities outside the monitored handle list."""
+def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, now: datetime) -> None:
+    """Find up to two strong posts from non-monitored accounts inside this schedule window."""
     candidates = discover_posts(
         provider,
         accounts,
@@ -184,12 +191,14 @@ def _run_discovery(db, provider, accounts: list[str]) -> None:
         logger.info("Discovery found no qualifying non-monitored posts.")
         return
 
-    logger.info("Discovery found %d qualifying non-monitored posts.", len(candidates))
-
     used_authors: set[str] = set()
     sent = 0
 
     for post, topic, score in candidates:
+        if not _is_recent_for_schedule(post, schedule_start, now):
+            logger.info("NO DISCOVERY FEED | %s | outside schedule window: %s", post.username, post.created_at)
+            continue
+
         author = post.username.lstrip("@").lower()
         if author in used_authors:
             continue
@@ -197,12 +206,7 @@ def _run_discovery(db, provider, accounts: list[str]) -> None:
             continue
 
         handle = f"@{post.username.lstrip('@')}"
-        logger.info(
-            "DISCOVERY | %s | score=%d | %s",
-            topic,
-            score,
-            handle,
-        )
+        logger.info("DISCOVERY | %s | score=%d | %s", topic, score, handle)
 
         if _process_post(db, post, handle, source=f"discovery:{topic}"):
             record_activity(
@@ -226,14 +230,23 @@ def run_monitor_cycle() -> None:
 
     provider = get_x_provider()
     db = get_db()
+    now = datetime.now(timezone.utc)
+    schedule_start = _schedule_start(now)
 
-    # Core coverage: 5-10 deliberately monitored accounts.
-    handles = _select_handles(db, accounts)
+    logger.info(
+        "Schedule window: %s → %s UTC",
+        schedule_start.isoformat(),
+        now.isoformat(),
+    )
+
+    # Fresh random selection every schedule. A handle can qualify again later today
+    # if it is reshuffled and has a new post inside that later schedule window.
+    handles = _select_handles(accounts)
     for handle in handles:
-        _process_handle(db, provider, handle)
+        _process_handle(db, provider, handle, schedule_start, now)
 
-    # Opportunity coverage: up to 3 strong posts from accounts we did not add.
-    _run_discovery(db, provider, accounts)
+    # Exactly two discovery slots maximum, subject to the same freshness rule.
+    _run_discovery(db, provider, accounts, schedule_start, now)
 
 
 if __name__ == "__main__":
