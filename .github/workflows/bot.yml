@@ -79,4 +79,5 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           AUTO_REPLY: "false"
+          SCHEDULE_SLOT: ${{ github.event.schedule == '0 10,15,20 * * *' && '10' || '' }}
         run: python -m bot.monitor
