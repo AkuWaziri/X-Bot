@@ -3,7 +3,9 @@ name: X-Bot
 on:
   workflow_dispatch:
   schedule:
-    # Production monitoring windows: 10:00, 15:00, and 20:00 UTC.
+    # TEMP SCHEDULER TEST: run every 5 minutes, then restore production schedule.
+    - cron: "*/5 * * * *"
+    # Production schedules retained below for restoration.
     - cron: "0 10 * * *"
     - cron: "0 15 * * *"
     - cron: "0 20 * * *"
@@ -56,6 +58,7 @@ jobs:
   monitor:
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '*/5 * * * *' ||
       github.event.schedule == '0 10 * * *' ||
       github.event.schedule == '0 15 * * *' ||
       github.event.schedule == '0 20 * * *'
