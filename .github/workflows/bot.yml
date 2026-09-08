@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   schedule:
     # TEMP TEST ONLY: verify three consecutive 10-minute scheduler windows.
-    - cron: "*/10 * * * *"
+    # Staggered away from the hour boundary to reduce GitHub scheduler contention.
+    - cron: "3,13,23,33,43,53 * * * *"
 
 concurrency:
   group: x-bot-monitor
@@ -15,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -54,7 +58,7 @@ jobs:
   monitor:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.schedule == '*/10 * * * *'
+      github.event.schedule == '3,13,23,33,43,53 * * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
