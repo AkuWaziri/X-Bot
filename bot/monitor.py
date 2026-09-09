@@ -134,10 +134,11 @@ def _select_handles(accounts: list[str]) -> list[str]:
     return selected
 
 
-def _process_post(db, post, handle: str, *, source: str) -> bool:
+def _process_post(db, post, handle: str, *, source: str) -> str:
+    """Process one post and return sent, skipped, or error."""
     if post_seen(db, post.id) and telegram_already_sent(db, post.id):
         logger.info("SEEN | %s | %s", handle, post.id)
-        return False
+        return "skipped"
 
     if not post_seen(db, post.id):
         save_post(db, post)
@@ -149,13 +150,16 @@ def _process_post(db, post, handle: str, *, source: str) -> bool:
     except Exception:
         logger.exception("Failed to generate reply suggestions for %s", post.id)
         record_activity(db, "error", handle, post.id, "Failed to generate reply suggestions")
+        return "error"
 
     if replies and not validate_replies(replies):
         logger.warning("Reply validation failed for %s: %r", post.id, replies)
-        replies = None
+        record_activity(db, "error", handle, post.id, "Reply validation failed")
+        return "error"
 
     if not replies:
-        return False
+        record_activity(db, "error", handle, post.id, "No valid reply suggestions generated")
+        return "error"
 
     record_activity(
         db,
@@ -175,7 +179,7 @@ def _process_post(db, post, handle: str, *, source: str) -> bool:
 
     try:
         if telegram_already_sent(db, post.id):
-            return False
+            return "skipped"
         send_new_post(
             handle,
             post.text,
@@ -190,7 +194,7 @@ def _process_post(db, post, handle: str, *, source: str) -> bool:
             post.id,
             f"Post notification sent to Telegram from {source}",
         )
-        return True
+        return "sent"
     except Exception:
         logger.exception("Failed to send Telegram notification for %s", post.id)
         record_activity(
@@ -200,21 +204,21 @@ def _process_post(db, post, handle: str, *, source: str) -> bool:
             post.id,
             f"Failed to send Telegram notification from {source}",
         )
-        return False
+        return "error"
 
 
-def _process_handle(db, provider, handle: str, schedule_start: datetime, now: datetime) -> None:
+def _process_handle(db, provider, handle: str, schedule_start: datetime, now: datetime) -> str:
     try:
         posts = provider.get_latest_posts(handle, limit=1)
     except Exception:
         logger.exception("Failed to fetch post for %s", handle)
         record_activity(db, "error", handle, None, "Failed to fetch latest post from X provider")
-        return
+        return "error"
 
     logger.info("Fetched %d latest post for %s", len(posts), handle)
     if not posts:
         logger.info("NO FEED | %s | no post returned", handle)
-        return
+        return "skipped"
 
     post = posts[0]
     parsed = _parse_created_at(post.created_at)
@@ -232,19 +236,20 @@ def _process_handle(db, provider, handle: str, schedule_start: datetime, now: da
             handle,
             post.created_at,
         )
-        return
+        return "skipped"
 
-    _process_post(db, post, handle, source="monitored account")
+    return _process_post(db, post, handle, source="monitored account")
 
 
-def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, now: datetime) -> None:
+def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, now: datetime) -> tuple[int, bool]:
     candidates = discover_posts(provider, accounts, max_posts=MAX_DISCOVERY_POSTS_PER_RUN)
     if not candidates:
         logger.info("Discovery found no qualifying non-monitored posts.")
-        return
+        return 0, False
 
     used_authors: set[str] = set()
     sent = 0
+    had_error = False
     for post, topic, score in candidates:
         if not _is_recent_for_schedule(post, schedule_start, now):
             logger.info(
@@ -260,7 +265,11 @@ def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, 
 
         handle = f"@{post.username.lstrip('@')}"
         logger.info("DISCOVERY | %s | score=%d | %s", topic, score, handle)
-        if _process_post(db, post, handle, source=f"discovery:{topic}"):
+        result = _process_post(db, post, handle, source=f"discovery:{topic}")
+        if result == "error":
+            had_error = True
+            continue
+        if result == "sent":
             record_activity(
                 db,
                 "discovery_processed",
@@ -272,6 +281,8 @@ def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, 
             sent += 1
             if sent >= MAX_DISCOVERY_POSTS_PER_RUN:
                 break
+
+    return sent, had_error
 
 
 def run_monitor_cycle() -> None:
@@ -297,10 +308,22 @@ def run_monitor_cycle() -> None:
         schedule_key,
     )
     handles = _select_handles(accounts)
-    for handle in handles:
-        _process_handle(db, provider, handle, schedule_start, now)
+    had_error = False
 
-    _run_discovery(db, provider, accounts, schedule_start, now)
+    for handle in handles:
+        if _process_handle(db, provider, handle, schedule_start, now) == "error":
+            had_error = True
+
+    _, discovery_error = _run_discovery(db, provider, accounts, schedule_start, now)
+    had_error = had_error or discovery_error
+
+    if had_error:
+        logger.error(
+            "SCHEDULE NOT MARKED COMPLETE | %s | one or more feed operations failed",
+            schedule_key,
+        )
+        return
+
     _mark_schedule_processed(db, schedule_start)
     logger.info("SCHEDULE COMPLETE | %s", schedule_key)
 
