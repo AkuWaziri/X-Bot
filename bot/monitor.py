@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 MONITORED_HANDLES_PER_RUN = 8
 MAX_DISCOVERY_POSTS_PER_RUN = 2
-SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (21, 15))
+SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (19, 0))
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 
 
@@ -45,7 +45,7 @@ def _schedule_start(now: datetime) -> datetime:
         return now - timedelta(minutes=minutes)
 
     configured = os.getenv("SCHEDULE_SLOT", "").strip()
-    configured_times = {"11": (11, 0), "14": (14, 0), "21:15": (21, 15)}
+    configured_times = {"11": (11, 0), "14": (14, 0), "19": (19, 0)}
     if configured in configured_times:
         hour, minute = configured_times[configured]
     else:
