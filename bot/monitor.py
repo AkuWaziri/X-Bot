@@ -87,6 +87,11 @@ def _select_handles(accounts: list[str]) -> list[str]:
     return candidates
 
 
+def _is_missing_account_error(exc: Exception) -> bool:
+    """Return True only for a provider 404 that means the monitored account cannot be resolved."""
+    return "TwitterAPIs HTTP 404:" in str(exc)
+
+
 def _process_post(db, post, handle: str, *, source: str) -> str:
     if post_seen(db, post.id) and telegram_already_sent(db, post.id):
         logger.info("SEEN | %s | %s", handle, post.id)
@@ -143,7 +148,11 @@ def _process_post(db, post, handle: str, *, source: str) -> str:
 def _process_handle(db, provider, handle: str, schedule_start: datetime, now: datetime) -> str:
     try:
         posts = provider.get_latest_posts(handle, limit=20)
-    except Exception:
+    except Exception as exc:
+        if _is_missing_account_error(exc):
+            logger.warning("SKIP ACCOUNT | %s | TwitterAPIs could not resolve this account", handle)
+            record_activity(db, "account_skipped", handle, None, "TwitterAPIs returned HTTP 404; account may be invalid, renamed, or unavailable")
+            return "skipped"
         logger.exception("Failed to fetch posts for %s", handle)
         record_activity(db, "error", handle, None, "Failed to fetch recent posts from X provider")
         return "error"
