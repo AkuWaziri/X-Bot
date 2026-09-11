@@ -98,15 +98,28 @@ def _process_post(db, post, handle: str, *, source: str) -> str:
 
     try:
         replies = generate_replies(post.text)
-    except Exception:
-        logger.exception("Failed to generate reply suggestions for %s", post.id)
-        record_activity(db, "error", handle, post.id, "Failed to generate reply suggestions")
-        return "error"
+    except Exception as exc:
+        if "Groq returned" not in str(exc):
+            logger.exception("Failed to generate reply suggestions for %s", post.id)
+            record_activity(db, "error", handle, post.id, "Failed to generate reply suggestions")
+            return "error"
+
+        logger.warning("Groq returned an incomplete reply set for %s; retrying once", post.id)
+        try:
+            replies = generate_replies(post.text)
+        except Exception as retry_exc:
+            if "Groq returned" in str(retry_exc):
+                logger.warning("SOFT SKIP | %s | Groq still returned an incomplete reply set after retry", post.id)
+                record_activity(db, "reply_generation_skipped", handle, post.id, "Groq returned fewer than three valid replies after one retry")
+                return "skipped"
+            logger.exception("Retry failed while generating reply suggestions for %s", post.id)
+            record_activity(db, "error", handle, post.id, "Failed to generate reply suggestions on retry")
+            return "error"
 
     if not replies or not validate_replies(replies):
         logger.warning("Reply validation failed for %s: %r", post.id, replies)
-        record_activity(db, "error", handle, post.id, "Reply validation failed")
-        return "error"
+        record_activity(db, "reply_generation_skipped", handle, post.id, "Reply validation failed")
+        return "skipped"
 
     record_activity(db, "replies_suggested", handle, post.id, f"Three reply suggestions generated from {source}")
 
