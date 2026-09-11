@@ -33,6 +33,14 @@ class FakeRecentProvider:
         return self.posts
 
 
+class FakeErrorProvider:
+    def __init__(self, message):
+        self.message = message
+
+    def get_latest_posts(self, handle, limit=20):
+        raise RuntimeError(self.message)
+
+
 class FakeDB:
     pass
 
@@ -125,6 +133,42 @@ def test_monitored_handle_scans_recent_posts_until_qualifying(monkeypatch):
 
     assert result == "sent"
     assert processed == ["new"]
+
+
+def test_unresolved_monitored_account_is_soft_skipped(monkeypatch):
+    activity = []
+    monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
+
+    provider = FakeErrorProvider("TwitterAPIs HTTP 404: Could not resolve @missing_account")
+    result = _process_handle(
+        FakeDB(),
+        provider,
+        "@missing_account",
+        datetime(2026, 9, 8, 14, 0, tzinfo=timezone.utc),
+        datetime(2026, 9, 8, 15, 30, tzinfo=timezone.utc),
+    )
+
+    assert result == "skipped"
+    assert activity
+    assert activity[0][1] == "account_skipped"
+
+
+def test_non_404_provider_failure_remains_hard_error(monkeypatch):
+    activity = []
+    monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
+
+    provider = FakeErrorProvider("TwitterAPIs HTTP 429: rate limited")
+    result = _process_handle(
+        FakeDB(),
+        provider,
+        "@alice",
+        datetime(2026, 9, 8, 14, 0, tzinfo=timezone.utc),
+        datetime(2026, 9, 8, 15, 30, tzinfo=timezone.utc),
+    )
+
+    assert result == "error"
+    assert activity
+    assert activity[0][1] == "error"
 
 
 def test_groq_incomplete_reply_set_retries_and_recovers(monkeypatch):
