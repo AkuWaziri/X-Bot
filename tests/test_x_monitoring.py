@@ -1,10 +1,16 @@
 import os
+from datetime import datetime, timezone
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 
-from datetime import datetime, timezone
-
-from bot.monitor import _is_recent_for_schedule, _parse_created_at
+from bot.discovery import DISCOVERY_TOPICS
+from bot.monitor import (
+    MONITORED_HANDLES_PER_RUN,
+    _is_recent_for_schedule,
+    _parse_created_at,
+    _process_handle,
+    _select_handles,
+)
 from bot.x.base import Post
 from bot.x.twitterapis import TwitterAPIsProvider
 
@@ -15,6 +21,15 @@ class FakeTwitterAPIsProvider(TwitterAPIsProvider):
 
     def _request(self, method, path, *, params=None, body=None):
         return {"tweets": self.tweets}
+
+
+class FakeRecentProvider:
+    def __init__(self, posts):
+        self.posts = posts
+
+    def get_latest_posts(self, handle, limit=20):
+        assert limit == 20
+        return self.posts
 
 
 def test_twitter_timestamp_format_is_supported():
@@ -64,3 +79,58 @@ def test_provider_finds_original_after_filtered_tweet():
     posts = provider.get_latest_posts("@alice", limit=1)
     assert len(posts) == 1
     assert posts[0].id == "original"
+
+
+def test_monitored_pool_randomizes_full_account_list():
+    accounts = [f"@user{i}" for i in range(20)]
+    selected = _select_handles(accounts)
+
+    assert len(selected) == 20
+    assert set(selected) == set(accounts)
+    assert MONITORED_HANDLES_PER_RUN == 15
+
+
+def test_monitored_handle_scans_recent_posts_until_qualifying(monkeypatch):
+    old_post = Post(
+        id="old",
+        text="old post",
+        username="alice",
+        created_at="Tue Sep 08 13:00:00 +0000 2026",
+    )
+    qualifying_post = Post(
+        id="new",
+        text="new post",
+        username="alice",
+        created_at="Tue Sep 08 15:20:00 +0000 2026",
+    )
+
+    processed = []
+    monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
+    monkeypatch.setattr(
+        "bot.monitor._process_post",
+        lambda db, post, handle, source: processed.append(post.id) or "sent",
+    )
+
+    provider = FakeRecentProvider([old_post, qualifying_post])
+    start = datetime(2026, 9, 8, 14, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 8, 15, 30, tzinfo=timezone.utc)
+
+    result = _process_handle(object(), provider, "@alice", start, now)
+
+    assert result == "sent"
+    assert processed == ["new"]
+
+
+def test_discovery_topic_pool_covers_requested_categories():
+    names = {topic.name for topic in DISCOVERY_TOPICS}
+    assert {
+        "defi",
+        "comics",
+        "ai_agents",
+        "airdrops",
+        "rewards",
+        "claim_now",
+        "security",
+        "hot_topics",
+    } <= names
