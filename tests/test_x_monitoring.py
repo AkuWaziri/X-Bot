@@ -11,8 +11,10 @@ from bot.monitor import (
     _process_handle,
     _process_post,
     _select_handles,
+    run_monitor_cycle,
 )
 from bot.x.base import Post
+from bot.x.mock import MockXProvider
 from bot.x.twitterapis import TwitterAPIsProvider
 
 
@@ -43,6 +45,38 @@ class FakeErrorProvider:
 
 class FakeDB:
     pass
+
+
+class IntegrationDB:
+    def __init__(self):
+        self.activities = []
+
+    def table(self, name):
+        return IntegrationTable(self, name)
+
+
+class IntegrationTable:
+    def __init__(self, db, name):
+        self.db = db
+        self.name = name
+        self.filters = {}
+
+    def select(self, *args, **kwargs):
+        return self
+
+    def eq(self, column, value):
+        self.filters[column] = value
+        return self
+
+    def limit(self, value):
+        return self
+
+    def execute(self):
+        if self.name == "activity_log" and self.filters.get("event_type") == "schedule_processed":
+            slot = self.filters.get("message")
+            rows = [item for item in self.db.activities if item["event_type"] == "schedule_processed" and item["message"] == slot]
+            return type("Result", (), {"data": rows})()
+        return type("Result", (), {"data": []})()
 
 
 def test_twitter_timestamp_format_is_supported():
@@ -239,3 +273,42 @@ def test_discovery_topic_pool_covers_requested_categories():
         "security",
         "hot_topics",
     } <= names
+
+
+def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypatch):
+    accounts = [f"@integration{i}" for i in range(20)]
+    db = IntegrationDB()
+    sent_posts = []
+    saved_replies = []
+
+    monkeypatch.setenv("TEST_MODE", "true")
+    monkeypatch.setenv("TEST_WINDOW_MINUTES", "10")
+    monkeypatch.setattr("bot.monitor.load_accounts", lambda: accounts)
+    monkeypatch.setattr("bot.monitor.get_x_provider", lambda: MockXProvider())
+    monkeypatch.setattr("bot.monitor.get_db", lambda: db)
+    monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.save_post", lambda db, post: sent_posts.append(("saved", post.id)))
+    monkeypatch.setattr("bot.monitor.save_pending_replies", lambda *args: saved_replies.append(args))
+    monkeypatch.setattr("bot.monitor.generate_replies", lambda text: ["good point", "interesting", "tell me more"])
+    monkeypatch.setattr("bot.monitor.validate_replies", lambda replies: True)
+    monkeypatch.setattr("bot.monitor.send_new_post", lambda *args, **kwargs: sent_posts.append(("telegram", kwargs.get("post_id"))))
+    monkeypatch.setattr(
+        "bot.monitor.record_activity",
+        lambda db, event_type, handle, post_id, message: db.activities.append(
+            {"event_type": event_type, "handle": handle, "post_id": post_id, "message": message}
+        ),
+    )
+
+    run_monitor_cycle()
+
+    telegram_posts = [item for item in sent_posts if item[0] == "telegram"]
+    monitored_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-@integration")]
+    discovery_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-discovery-")]
+
+    assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN
+    assert len(discovery_posts) == 5
+    assert len(telegram_posts) == 20
+    assert len(saved_replies) == 20
+    assert any(item["event_type"] == "schedule_processed" for item in db.activities)
+    assert not any(item["event_type"] == "error" for item in db.activities)
