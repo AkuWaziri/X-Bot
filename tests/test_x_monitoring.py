@@ -9,6 +9,7 @@ from bot.monitor import (
     _is_recent_for_schedule,
     _parse_created_at,
     _process_handle,
+    _process_post,
     _select_handles,
 )
 from bot.x.base import Post
@@ -30,6 +31,11 @@ class FakeRecentProvider:
     def get_latest_posts(self, handle, limit=20):
         assert limit == 20
         return self.posts
+
+
+class FakeDB:
+    def __init__(self):
+        self.events = []
 
 
 def test_twitter_timestamp_format_is_supported():
@@ -120,6 +126,56 @@ def test_monitored_handle_scans_recent_posts_until_qualifying(monkeypatch):
 
     assert result == "sent"
     assert processed == ["new"]
+
+
+def test_groq_incomplete_reply_set_retries_and_recovers(monkeypatch):
+    post = Post(
+        id="groq-retry",
+        text="test post",
+        username="alice",
+        created_at="Tue Sep 08 15:20:00 +0000 2026",
+        url="https://x.com/alice/status/groq-retry",
+    )
+    calls = []
+    monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.save_post", lambda db, value: None)
+    monkeypatch.setattr("bot.monitor.record_activity", lambda *args: None)
+    monkeypatch.setattr("bot.monitor.send_new_post", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "bot.monitor.generate_replies",
+        lambda text: calls.append(text) or (_ for _ in ()).throw(RuntimeError("Groq returned 2 valid replies instead of 3")) if len(calls) == 1 else ["this is good", "wait really?", "lol that is wild"],
+    )
+    monkeypatch.setattr("bot.monitor.save_pending_replies", lambda *args: None)
+
+    result = _process_post(FakeDB(), post, "@alice", source="test")
+
+    assert result == "sent"
+    assert len(calls) == 2
+
+
+def test_groq_incomplete_reply_set_is_soft_skipped_after_retry(monkeypatch):
+    post = Post(
+        id="groq-skip",
+        text="test post",
+        username="alice",
+        created_at="Tue Sep 08 15:20:00 +0000 2026",
+        url="https://x.com/alice/status/groq-skip",
+    )
+    calls = []
+    monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.save_post", lambda db, value: None)
+    monkeypatch.setattr("bot.monitor.record_activity", lambda *args: None)
+    monkeypatch.setattr(
+        "bot.monitor.generate_replies",
+        lambda text: calls.append(text) or (_ for _ in ()).throw(RuntimeError("Groq returned 2 valid replies instead of 3")),
+    )
+
+    result = _process_post(FakeDB(), post, "@alice", source="test")
+
+    assert result == "skipped"
+    assert len(calls) == 2
 
 
 def test_discovery_topic_pool_covers_requested_categories():
