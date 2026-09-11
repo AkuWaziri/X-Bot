@@ -303,7 +303,7 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     run_monitor_cycle()
 
     telegram_posts = [item for item in sent_posts if item[0] == "telegram"]
-    monitored_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-@integration")]
+    monitored_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-integration")]
     discovery_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-discovery-")]
 
     assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN
