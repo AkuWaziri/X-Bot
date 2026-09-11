@@ -34,8 +34,7 @@ class FakeRecentProvider:
 
 
 class FakeDB:
-    def __init__(self):
-        self.events = []
+    pass
 
 
 def test_twitter_timestamp_format_is_supported():
@@ -137,15 +136,19 @@ def test_groq_incomplete_reply_set_retries_and_recovers(monkeypatch):
         url="https://x.com/alice/status/groq-retry",
     )
     calls = []
+
+    def fake_generate_replies(text):
+        calls.append(text)
+        if len(calls) == 1:
+            raise RuntimeError("Groq returned 2 valid replies instead of 3")
+        return ["this is good", "wait really?", "lol that is wild"]
+
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.save_post", lambda db, value: None)
     monkeypatch.setattr("bot.monitor.record_activity", lambda *args: None)
     monkeypatch.setattr("bot.monitor.send_new_post", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        "bot.monitor.generate_replies",
-        lambda text: calls.append(text) or (_ for _ in ()).throw(RuntimeError("Groq returned 2 valid replies instead of 3")) if len(calls) == 1 else ["this is good", "wait really?", "lol that is wild"],
-    )
+    monkeypatch.setattr("bot.monitor.generate_replies", fake_generate_replies)
     monkeypatch.setattr("bot.monitor.save_pending_replies", lambda *args: None)
 
     result = _process_post(FakeDB(), post, "@alice", source="test")
@@ -163,14 +166,16 @@ def test_groq_incomplete_reply_set_is_soft_skipped_after_retry(monkeypatch):
         url="https://x.com/alice/status/groq-skip",
     )
     calls = []
+
+    def fake_generate_replies(text):
+        calls.append(text)
+        raise RuntimeError("Groq returned 2 valid replies instead of 3")
+
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.save_post", lambda db, value: None)
     monkeypatch.setattr("bot.monitor.record_activity", lambda *args: None)
-    monkeypatch.setattr(
-        "bot.monitor.generate_replies",
-        lambda text: calls.append(text) or (_ for _ in ()).throw(RuntimeError("Groq returned 2 valid replies instead of 3")),
-    )
+    monkeypatch.setattr("bot.monitor.generate_replies", fake_generate_replies)
 
     result = _process_post(FakeDB(), post, "@alice", source="test")
 
