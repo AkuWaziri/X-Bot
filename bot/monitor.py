@@ -13,8 +13,8 @@ from bot.x.provider import get_x_provider
 
 logger = logging.getLogger(__name__)
 
-MONITORED_HANDLES_PER_RUN = 8
-MAX_DISCOVERY_POSTS_PER_RUN = 2
+MONITORED_HANDLES_PER_RUN = 15
+MAX_DISCOVERY_POSTS_PER_RUN = 5
 SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (19, 0))
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 
@@ -83,9 +83,8 @@ def _is_recent_for_schedule(post, schedule_start: datetime, now: datetime) -> bo
 def _select_handles(accounts: list[str]) -> list[str]:
     candidates = list(accounts)
     random.shuffle(candidates)
-    selected = candidates[: min(MONITORED_HANDLES_PER_RUN, len(candidates))]
-    logger.info("Selected %d monitored handles for this schedule: %s", len(selected), ", ".join(selected))
-    return selected
+    logger.info("Randomized monitored handle pool: %d handles", len(candidates))
+    return candidates
 
 
 def _process_post(db, post, handle: str, *, source: str) -> str:
@@ -130,23 +129,28 @@ def _process_post(db, post, handle: str, *, source: str) -> str:
 
 def _process_handle(db, provider, handle: str, schedule_start: datetime, now: datetime) -> str:
     try:
-        posts = provider.get_latest_posts(handle, limit=1)
+        posts = provider.get_latest_posts(handle, limit=20)
     except Exception:
-        logger.exception("Failed to fetch post for %s", handle)
-        record_activity(db, "error", handle, None, "Failed to fetch latest post from X provider")
+        logger.exception("Failed to fetch posts for %s", handle)
+        record_activity(db, "error", handle, None, "Failed to fetch recent posts from X provider")
         return "error"
 
     if not posts:
-        logger.info("NO FEED | %s | no post returned", handle)
+        logger.info("NO FEED | %s | no posts returned", handle)
         return "skipped"
 
-    post = posts[0]
-    parsed = _parse_created_at(post.created_at)
-    logger.info("LATEST | %s | id=%s | created_at=%r | parsed_utc=%s", handle, post.id, post.created_at, parsed.isoformat() if parsed else "INVALID")
-    if not _is_recent_for_schedule(post, schedule_start, now):
-        logger.info("NO FEED | %s | latest post is outside schedule window: %s", handle, post.created_at)
-        return "skipped"
-    return _process_post(db, post, handle, source="monitored account")
+    for post in posts:
+        parsed = _parse_created_at(post.created_at)
+        logger.info("POST | %s | id=%s | created_at=%r | parsed_utc=%s", handle, post.id, post.created_at, parsed.isoformat() if parsed else "INVALID")
+        if not _is_recent_for_schedule(post, schedule_start, now):
+            continue
+        if post_seen(db, post.id) and telegram_already_sent(db, post.id):
+            logger.info("SEEN | %s | %s | trying next qualifying post", handle, post.id)
+            continue
+        return _process_post(db, post, handle, source="monitored account")
+
+    logger.info("NO FEED | %s | no qualifying unseen post in schedule window", handle)
+    return "skipped"
 
 
 def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, now: datetime) -> tuple[int, bool]:
@@ -197,19 +201,29 @@ def run_monitor_cycle() -> None:
 
     logger.info("Schedule window: %s → %s UTC | slot=%s", schedule_start.isoformat(), now.isoformat(), schedule_key)
     had_error = False
-    for handle in _select_handles(accounts):
-        if _process_handle(db, provider, handle, schedule_start, now) == "error":
-            had_error = True
+    monitored_sent = 0
 
-    _, discovery_error = _run_discovery(db, provider, accounts, schedule_start, now)
+    for handle in _select_handles(accounts):
+        if monitored_sent >= MONITORED_HANDLES_PER_RUN:
+            break
+        result = _process_handle(db, provider, handle, schedule_start, now)
+        if result == "error":
+            had_error = True
+        elif result == "sent":
+            monitored_sent += 1
+
+    logger.info("MONITORED COMPLETE | feeds=%d/%d", monitored_sent, MONITORED_HANDLES_PER_RUN)
+
+    discovery_sent, discovery_error = _run_discovery(db, provider, accounts, schedule_start, now)
     had_error = had_error or discovery_error
+    logger.info("DISCOVERY COMPLETE | feeds=%d/%d", discovery_sent, MAX_DISCOVERY_POSTS_PER_RUN)
 
     if had_error:
         logger.error("SCHEDULE NOT MARKED COMPLETE | %s | one or more feed operations failed", schedule_key)
         return
 
     _mark_schedule_processed(db, schedule_start)
-    logger.info("SCHEDULE COMPLETE | %s", schedule_key)
+    logger.info("SCHEDULE COMPLETE | %s | total_feeds=%d", schedule_key, monitored_sent + discovery_sent)
 
 
 if __name__ == "__main__":
