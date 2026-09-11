@@ -21,7 +21,7 @@ def test_mock_provider_returns_discovery_post_without_network():
     posts = provider.search_posts("airdrop rewards", limit=20)
 
     assert len(posts) == 1
-    assert posts[0].username == "mock_discovery"
+    assert posts[0].username == "mock_discovery_airdrop"
     assert posts[0].created_at == "2026-09-08T15:27:00+00:00"
 
 
