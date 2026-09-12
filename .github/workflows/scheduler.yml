@@ -6,10 +6,12 @@ on:
   # 12:07 WAT = 11:07 UTC
   # 15:07 WAT = 14:07 UTC
   # 20:07 WAT = 19:07 UTC
+  # Temporary one-off scheduler verification: 14:57 WAT = 13:57 UTC
   schedule:
     - cron: "7 11 * * *"
     - cron: "7 14 * * *"
     - cron: "7 19 * * *"
+    - cron: "57 13 * * *"
 
 concurrency:
   group: x-bot-scheduler
@@ -29,13 +31,47 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Verify scheduled trigger reached runner
+        if: github.event_name == 'schedule'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timezone
+
+          token = os.environ["TELEGRAM_BOT_TOKEN"]
+          chat_id = os.environ["TELEGRAM_CHAT_ID"]
+          schedule = os.environ.get("EVENT_SCHEDULE") or "unknown"
+          now = datetime.now(timezone.utc).isoformat()
+          text = (
+              "🕒 X-BOT SCHEDULE TRIGGERED\n\n"
+              f"Schedule: {schedule}\n"
+              f"UTC: {now}\n"
+              "WAT: UTC+1\n\n"
+              "GitHub scheduled execution reached the runner"
+          )
+          url = f"https://api.telegram.org/bot{token}/sendMessage"
+          payload = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode()
+          with urllib.request.urlopen(urllib.request.Request(url, data=payload), timeout=20) as response:
+              data = json.load(response)
+          if not data.get("ok"):
+              raise RuntimeError(f"Telegram scheduler heartbeat failed: {data}")
+          PY
+
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
 
       - name: Run regression tests
         env:
           TELEGRAM_BOT_TOKEN: "test-token"
-          X_PROVIDER_MODE: "mock"
+          X_PROVIDER_MODE: mock
         run: pytest -q
 
       - name: Run monitoring cycle
@@ -46,7 +82,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          X_PROVIDER_MODE: "twitterapis"
+          X_PROVIDER_MODE: twitterapis
           AUTO_REPLY: "false"
           SCHEDULE_SLOT: ""
         run: python -m bot.monitor
