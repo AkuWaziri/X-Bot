@@ -2,10 +2,9 @@ name: X-Bot Scheduler
 
 on:
   workflow_dispatch:
-  # TEMPORARY 5-minute scheduler test.
-  # GitHub cron is UTC; WAT is UTC+1.
+  # ONE-OFF AUTOMATIC TEST: 13:33 WAT = 12:33 UTC
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "33 12 * * *"
 
 concurrency:
   group: x-bot-scheduler
