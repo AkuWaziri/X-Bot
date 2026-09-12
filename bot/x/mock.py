@@ -29,13 +29,36 @@ class MockXProvider(XProvider):
         ][:limit]
 
     def search_posts(self, query: str, limit: int = 20) -> list[Post]:
-        topic = query.strip().split()[0] if query.strip() else "crypto"
-        slug = "".join(character.lower() if character.isalnum() else "-" for character in topic).strip("-") or "crypto"
+        """Return one stable, unique candidate per discovery topic.
+
+        The real provider searches independently for each topic. The mock must do
+        the same so integration tests can reliably exercise the five-post
+        discovery cap without duplicate mock post IDs collapsing the result set.
+        """
+        normalized = query.lower()
+        topic_markers = (
+            ("tokenized_stocks", ("tokenized stocks", "tokenized stock", "tokenized equities", "onchain stocks", "stock tokens")),
+            ("ai_agents", ("ai agents", "ai agent", "agentic ai")),
+            ("claim_now", ("claim now", "claim your", "claim)")),
+            ("airdrops", ("airdrop", "testnet", "points")),
+            ("rewards", ("rewards", "incentives")),
+            ("security", ("security", "exploit", "hacked", "drained", "vulnerability")),
+            ("comics", ("crypto comic", "web3 comic", "crypto meme", "web3 meme")),
+            ("hot_topics", ("trending", "hot topic", "viral", "breaking", "just in")),
+            ("defi", ("defi", "decentralized finance", "dex", "lending", "liquidity")),
+        )
+
+        slug = "crypto"
+        for candidate, markers in topic_markers:
+            if any(marker in normalized for marker in markers):
+                slug = candidate
+                break
+
         username = f"mock_discovery_{slug}"
         return [
             Post(
                 id=f"mock-discovery-{slug}",
-                text=f"Mock discovery opportunity about {topic}",
+                text=f"Mock discovery opportunity about {slug}",
                 username=username,
                 created_at=(self.now - timedelta(minutes=3)).isoformat(),
                 url=f"https://x.com/{username}/status/mock-discovery-{slug}",
