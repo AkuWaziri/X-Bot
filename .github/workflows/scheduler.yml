@@ -2,9 +2,14 @@ name: X-Bot Scheduler
 
 on:
   workflow_dispatch:
-  # ONE-OFF AUTOMATIC TEST: 13:33 WAT = 12:33 UTC
+  # Production schedule in WAT (UTC+1):
+  # 12:07 WAT = 11:07 UTC
+  # 15:07 WAT = 14:07 UTC
+  # 20:07 WAT = 19:07 UTC
   schedule:
-    - cron: "33 12 * * *"
+    - cron: "7 11 * * *"
+    - cron: "7 14 * * *"
+    - cron: "7 19 * * *"
 
 concurrency:
   group: x-bot-scheduler
