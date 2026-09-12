@@ -17,6 +17,7 @@ MONITORED_HANDLES_PER_RUN = 15
 MAX_DISCOVERY_POSTS_PER_RUN = 5
 SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (19, 0))
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
+SCAN_CHECKPOINT_EVENT = "scan_checkpoint"
 
 
 def telegram_already_sent(db, post_id: str) -> bool:
@@ -38,8 +39,29 @@ def _mark_schedule_processed(db, schedule_start: datetime) -> None:
     record_activity(db, SCHEDULE_ACTIVITY_EVENT, "SYSTEM", None, f"slot={_schedule_key(schedule_start)}")
 
 
+def _last_scan_checkpoint(db) -> datetime | None:
+    result = (
+        db.table("activity_log")
+        .select("message")
+        .eq("event_type", SCAN_CHECKPOINT_EVENT)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return None
+    message = str(result.data[0].get("message") or "")
+    if not message.startswith("scan="):
+        return None
+    return _parse_created_at(message[5:])
+
+
+def _mark_scan_checkpoint(db, scan_at: datetime) -> None:
+    record_activity(db, SCAN_CHECKPOINT_EVENT, "SYSTEM", None, f"scan={scan_at.astimezone(timezone.utc).isoformat()}")
+
+
 def _schedule_start(now: datetime) -> datetime:
-    """Return the start of the active monitoring window in UTC."""
+    """Return the fallback start point used only before a checkpoint exists."""
     if os.getenv("TEST_MODE", "").strip().lower() == "true":
         minutes = int(os.getenv("TEST_WINDOW_MINUTES", "10"))
         return now - timedelta(minutes=minutes)
@@ -75,9 +97,9 @@ def _parse_created_at(value: str | None) -> datetime | None:
     return created.astimezone(timezone.utc)
 
 
-def _is_recent_for_schedule(post, schedule_start: datetime, now: datetime) -> bool:
+def _is_recent_for_schedule(post, scan_start: datetime, now: datetime) -> bool:
     created = _parse_created_at(post.created_at)
-    return created is not None and schedule_start <= created <= now and created.date() == now.date()
+    return created is not None and scan_start < created <= now
 
 
 def _select_handles(accounts: list[str]) -> list[str]:
@@ -145,7 +167,7 @@ def _process_post(db, post, handle: str, *, source: str) -> str:
         return "error"
 
 
-def _process_handle(db, provider, handle: str, schedule_start: datetime, now: datetime) -> str:
+def _process_handle(db, provider, handle: str, scan_start: datetime, now: datetime) -> str:
     try:
         posts = provider.get_latest_posts(handle, limit=20)
     except Exception as exc:
@@ -161,33 +183,44 @@ def _process_handle(db, provider, handle: str, schedule_start: datetime, now: da
         logger.info("NO FEED | %s | no posts returned", handle)
         return "skipped"
 
+    newest = None
+    newest_created = None
     for post in posts:
         parsed = _parse_created_at(post.created_at)
         logger.info("POST | %s | id=%s | created_at=%r | parsed_utc=%s", handle, post.id, post.created_at, parsed.isoformat() if parsed else "INVALID")
-        if not _is_recent_for_schedule(post, schedule_start, now):
+        if not _is_recent_for_schedule(post, scan_start, now):
             continue
         if post_seen(db, post.id) and telegram_already_sent(db, post.id):
-            logger.info("SEEN | %s | %s | trying next qualifying post", handle, post.id)
             continue
-        return _process_post(db, post, handle, source="monitored account")
+        if newest_created is None or (parsed is not None and parsed > newest_created):
+            newest = post
+            newest_created = parsed
 
-    logger.info("NO FEED | %s | no qualifying unseen post in schedule window", handle)
-    return "skipped"
+    if newest is None:
+        logger.info("NO FEED | %s | no new qualifying post since last scan", handle)
+        return "skipped"
+
+    return _process_post(db, newest, handle, source="monitored account")
 
 
-def _run_discovery(db, provider, accounts: list[str], schedule_start: datetime, now: datetime) -> tuple[int, bool]:
+def _run_discovery(db, provider, accounts: list[str], scan_start: datetime, now: datetime) -> tuple[int, bool]:
     candidates = discover_posts(provider, accounts, max_posts=MAX_DISCOVERY_POSTS_PER_RUN)
     if not candidates:
         logger.info("Discovery found no qualifying non-monitored posts.")
         return 0, False
 
+    recent = []
+    for post, topic, score in candidates:
+        if _is_recent_for_schedule(post, scan_start, now):
+            recent.append((post, topic, score))
+        else:
+            logger.info("NO DISCOVERY FEED | %s | outside last-scan range: %s", post.username, post.created_at)
+
+    recent.sort(key=lambda item: _parse_created_at(item[0].created_at) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     used_authors: set[str] = set()
     sent = 0
     had_error = False
-    for post, topic, score in candidates:
-        if not _is_recent_for_schedule(post, schedule_start, now):
-            logger.info("NO DISCOVERY FEED | %s | outside schedule window: %s", post.username, post.created_at)
-            continue
+    for post, topic, score in recent:
         author = post.username.lstrip("@").lower()
         if author in used_authors or post_seen(db, post.id):
             continue
@@ -214,21 +247,17 @@ def run_monitor_cycle() -> None:
     provider = get_x_provider()
     db = get_db()
     now = datetime.now(timezone.utc)
-    schedule_start = _schedule_start(now)
-    schedule_key = _schedule_key(schedule_start)
+    previous_scan = _last_scan_checkpoint(db)
+    scan_start = previous_scan or _schedule_start(now)
+    logger.info("Scan range: %s → %s UTC", scan_start.isoformat(), now.isoformat())
 
-    if _schedule_already_processed(db, schedule_start):
-        logger.info("SCHEDULE ALREADY PROCESSED | %s | exiting", schedule_key)
-        return
-
-    logger.info("Schedule window: %s → %s UTC | slot=%s", schedule_start.isoformat(), now.isoformat(), schedule_key)
     had_error = False
     monitored_sent = 0
 
     for handle in _select_handles(accounts):
         if monitored_sent >= MONITORED_HANDLES_PER_RUN:
             break
-        result = _process_handle(db, provider, handle, schedule_start, now)
+        result = _process_handle(db, provider, handle, scan_start, now)
         if result == "error":
             had_error = True
         elif result == "sent":
@@ -236,16 +265,16 @@ def run_monitor_cycle() -> None:
 
     logger.info("MONITORED COMPLETE | feeds=%d/%d", monitored_sent, MONITORED_HANDLES_PER_RUN)
 
-    discovery_sent, discovery_error = _run_discovery(db, provider, accounts, schedule_start, now)
+    discovery_sent, discovery_error = _run_discovery(db, provider, accounts, scan_start, now)
     had_error = had_error or discovery_error
     logger.info("DISCOVERY COMPLETE | feeds=%d/%d", discovery_sent, MAX_DISCOVERY_POSTS_PER_RUN)
 
     if had_error:
-        logger.error("SCHEDULE NOT MARKED COMPLETE | %s | one or more feed operations failed", schedule_key)
+        logger.error("SCAN NOT CHECKPOINTED | one or more feed operations failed")
         return
 
-    _mark_schedule_processed(db, schedule_start)
-    logger.info("SCHEDULE COMPLETE | %s | total_feeds=%d", schedule_key, monitored_sent + discovery_sent)
+    _mark_scan_checkpoint(db, now)
+    logger.info("SCAN COMPLETE | checkpoint=%s | total_feeds=%d", now.isoformat(), monitored_sent + discovery_sent)
 
 
 if __name__ == "__main__":
