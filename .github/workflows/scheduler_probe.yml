@@ -1,0 +1,38 @@
+name: X-Bot Scheduler Probe
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Telegram scheduler path
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$TELEGRAM_BOT_TOKEN"
+          test -n "$TELEGRAM_CHAT_ID"
+          python - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timezone
+
+          token = os.environ["TELEGRAM_BOT_TOKEN"]
+          chat_id = os.environ["TELEGRAM_CHAT_ID"]
+          now = datetime.now(timezone.utc).isoformat()
+          text = f"🧪 X-BOT SCHEDULER PROBE\n\nGitHub scheduled trigger reached Telegram path\nUTC: {now}\nWAT: UTC+1\n\nNo X/Twitter API call was made by this probe"
+          url = f"https://api.telegram.org/bot{token}/sendMessage"
+          payload = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode()
+          with urllib.request.urlopen(urllib.request.Request(url, data=payload), timeout=20) as response:
+              data = json.load(response)
+          if not data.get("ok"):
+              raise RuntimeError(f"Telegram probe failed: {data}")
+          print("TELEGRAM_PROBE_OK")
+          PY
