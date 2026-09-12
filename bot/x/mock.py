@@ -40,7 +40,7 @@ class MockXProvider(XProvider):
             ("tokenized_stocks", ("tokenized stocks", "tokenized stock", "tokenized equities", "onchain stocks", "stock tokens")),
             ("ai_agents", ("ai agents", "ai agent", "agentic ai")),
             ("claim_now", ("claim now", "claim your", "claim)")),
-            ("airdrops", ("airdrop", "testnet", "points")),
+            ("airdrop", ("airdrop", "testnet", "points")),
             ("rewards", ("rewards", "incentives")),
             ("security", ("security", "exploit", "hacked", "drained", "vulnerability")),
             ("comics", ("crypto comic", "web3 comic", "crypto meme", "web3 meme")),
