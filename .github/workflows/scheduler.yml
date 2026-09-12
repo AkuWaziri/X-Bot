@@ -2,14 +2,10 @@ name: X-Bot Scheduler
 
 on:
   workflow_dispatch:
-  # Production schedule in WAT (UTC+1):
-  # 12:07 WAT = 11:07 UTC
-  # 15:07 WAT = 14:07 UTC
-  # 20:07 WAT = 19:07 UTC
+  # TEMPORARY 5-minute scheduler test.
+  # GitHub cron is UTC; WAT is UTC+1.
   schedule:
-    - cron: "7 11 * * *"
-    - cron: "7 14 * * *"
-    - cron: "7 19 * * *"
+    - cron: "*/5 * * * *"
 
 concurrency:
   group: x-bot-scheduler
