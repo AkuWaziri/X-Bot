@@ -2,6 +2,10 @@ name: X-Bot Scheduler
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "7 11 * * *"
+    - cron: "7 14 * * *"
+    - cron: "7 19 * * *"
 
 concurrency:
   group: x-bot-scheduler
