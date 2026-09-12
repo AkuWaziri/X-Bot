@@ -1,6 +1,7 @@
 name: X-Bot Scheduler Probe
 
 on:
+  push:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
@@ -27,7 +28,7 @@ jobs:
           token = os.environ["TELEGRAM_BOT_TOKEN"]
           chat_id = os.environ["TELEGRAM_CHAT_ID"]
           now = datetime.now(timezone.utc).isoformat()
-          text = f"🧪 X-BOT SCHEDULER PROBE\n\nGitHub scheduled trigger reached Telegram path\nUTC: {now}\nWAT: UTC+1\n\nNo X/Twitter API call was made by this probe"
+          text = f"🧪 X-BOT SCHEDULER PROBE\n\nWorkflow execution reached Telegram\nUTC: {now}\nWAT: UTC+1\n\nNo X/Twitter API call was made by this probe"
           url = f"https://api.telegram.org/bot{token}/sendMessage"
           payload = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode()
           with urllib.request.urlopen(urllib.request.Request(url, data=payload), timeout=20) as response:
