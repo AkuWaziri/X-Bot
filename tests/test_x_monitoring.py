@@ -7,6 +7,7 @@ from bot.discovery import DISCOVERY_TOPICS
 from bot.monitor import (
     MONITORED_HANDLES_PER_RUN,
     _is_recent_for_schedule,
+    _last_scan_checkpoint,
     _parse_created_at,
     _process_handle,
     _process_post,
@@ -68,6 +69,9 @@ class IntegrationTable:
         self.filters[column] = value
         return self
 
+    def order(self, *args, **kwargs):
+        return self
+
     def limit(self, value):
         return self
 
@@ -76,6 +80,9 @@ class IntegrationTable:
             slot = self.filters.get("message")
             rows = [item for item in self.db.activities if item["event_type"] == "schedule_processed" and item["message"] == slot]
             return type("Result", (), {"data": rows})()
+        if self.name == "activity_log" and self.filters.get("event_type") == "scan_checkpoint":
+            rows = [item for item in self.db.activities if item["event_type"] == "scan_checkpoint"]
+            return type("Result", (), {"data": rows[-1:]})()
         return type("Result", (), {"data": []})()
 
 
@@ -137,21 +144,22 @@ def test_monitored_pool_randomizes_full_account_list():
     assert MONITORED_HANDLES_PER_RUN == 15
 
 
-def test_monitored_handle_scans_recent_posts_until_qualifying(monkeypatch):
-    old_post = Post(
-        id="old",
-        text="old post",
+def test_monitored_handle_selects_newest_qualifying_post_since_scan():
+    older_post = Post(
+        id="older",
+        text="older post",
         username="alice",
-        created_at="Tue Sep 08 13:00:00 +0000 2026",
+        created_at="Tue Sep 08 15:10:00 +0000 2026",
     )
-    qualifying_post = Post(
-        id="new",
-        text="new post",
+    newest_post = Post(
+        id="newest",
+        text="newest post",
         username="alice",
         created_at="Tue Sep 08 15:20:00 +0000 2026",
     )
 
     processed = []
+    monkeypatch = __import__("pytest").MonkeyPatch()
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
     monkeypatch.setattr(
@@ -159,14 +167,15 @@ def test_monitored_handle_scans_recent_posts_until_qualifying(monkeypatch):
         lambda db, post, handle, source: processed.append(post.id) or "sent",
     )
 
-    provider = FakeRecentProvider([old_post, qualifying_post])
-    start = datetime(2026, 9, 8, 14, 0, tzinfo=timezone.utc)
+    provider = FakeRecentProvider([older_post, newest_post])
+    start = datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc)
     now = datetime(2026, 9, 8, 15, 30, tzinfo=timezone.utc)
 
     result = _process_handle(object(), provider, "@alice", start, now)
+    monkeypatch.undo()
 
     assert result == "sent"
-    assert processed == ["new"]
+    assert processed == ["newest"]
 
 
 def test_unresolved_monitored_account_is_soft_skipped(monkeypatch):
@@ -272,7 +281,22 @@ def test_discovery_topic_pool_covers_requested_categories():
         "claim_now",
         "security",
         "hot_topics",
+        "tokenized_stocks",
     } <= names
+
+
+def test_last_scan_checkpoint_is_read_from_activity_log():
+    db = IntegrationDB()
+    db.activities.append(
+        {
+            "event_type": "scan_checkpoint",
+            "handle": "SYSTEM",
+            "post_id": None,
+            "message": "scan=2026-09-08T15:00:00+00:00",
+        }
+    )
+
+    assert _last_scan_checkpoint(db) == datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc)
 
 
 def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypatch):
@@ -310,5 +334,5 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     assert len(discovery_posts) == 5
     assert len(telegram_posts) == 20
     assert len(saved_replies) == 20
-    assert any(item["event_type"] == "schedule_processed" for item in db.activities)
+    assert any(item["event_type"] == "scan_checkpoint" for item in db.activities)
     assert not any(item["event_type"] == "error" for item in db.activities)
