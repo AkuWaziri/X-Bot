@@ -1,0 +1,40 @@
+name: X-Bot Schedule Trigger Diagnostic
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Record scheduled trigger
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          mkdir -p .github/runtime
+          cat > .github/runtime/schedule_trigger.txt <<EOF
+          event=$EVENT_NAME
+          schedule=$EVENT_SCHEDULE
+          utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          sha=${GITHUB_SHA}
+          EOF
+
+      - name: Commit trigger evidence
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/runtime/schedule_trigger.txt
+          git diff --cached --quiet && exit 0
+          git commit -m "Record scheduler trigger evidence"
+          git push
