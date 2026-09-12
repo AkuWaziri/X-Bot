@@ -1,17 +1,16 @@
 name: X-Bot Scheduler
 
 on:
+  push:
   workflow_dispatch:
   # Production schedule in WAT (UTC+1):
   # 12:07 WAT = 11:07 UTC
   # 15:07 WAT = 14:07 UTC
   # 20:07 WAT = 19:07 UTC
-  # Temporary one-off scheduler verification: 14:57 WAT = 13:57 UTC
   schedule:
     - cron: "7 11 * * *"
     - cron: "7 14 * * *"
     - cron: "7 19 * * *"
-    - cron: "57 13 * * *"
 
 concurrency:
   group: x-bot-scheduler
@@ -74,7 +73,24 @@ jobs:
           X_PROVIDER_MODE: mock
         run: pytest -q
 
-      - name: Run monitoring cycle
+      - name: Run controlled live feed verification
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'CONTROLLED LIVE VERIFICATION')
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TWITTERAPIS_API_KEY: ${{ secrets.TWITTERAPIS_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          X_PROVIDER_MODE: twitterapis
+          AUTO_REPLY: "false"
+          TEST_MODE: "true"
+          TEST_WINDOW_MINUTES: "30"
+          SCHEDULE_SLOT: ""
+        run: python -m bot.monitor
+
+      - name: Run production monitoring cycle
+        if: github.event_name != 'push' || !contains(github.event.head_commit.message, 'CONTROLLED LIVE VERIFICATION')
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
