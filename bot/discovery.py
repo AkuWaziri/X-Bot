@@ -1,6 +1,7 @@
 import random
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from bot.x.base import Post, XProvider
 
@@ -21,6 +22,7 @@ DISCOVERY_TOPICS = (
     DiscoveryTopic("claim_now", '("claim now" OR "claim your" OR claim) (airdrop OR rewards OR tokens) (crypto OR web3)', ("claim", "airdrop", "rewards", "tokens")),
     DiscoveryTopic("security", '("crypto security" OR "defi hack" OR exploit OR drained OR hacked OR vulnerability) (crypto OR defi OR web3)', ("security", "hack", "exploit", "drained", "hacked")),
     DiscoveryTopic("hot_topics", '(crypto OR bitcoin OR ethereum OR stablecoin OR solana OR web3) (trending OR "hot topic" OR viral OR breaking OR "just in")', ("crypto", "trending", "viral", "breaking", "news")),
+    DiscoveryTopic("tokenized_stocks", '(("tokenized stocks" OR "tokenized stock" OR "tokenized equities" OR "onchain stocks" OR "on-chain stocks" OR "stock tokens") AND (crypto OR blockchain OR web3 OR RWA OR "real world assets"))', ("stock", "stocks", "equities", "tokenized", "onchain", "rwa", "crypto", "blockchain")),
 )
 
 SPAMMY_TERMS = ("referral", "ref link", "dm me for", "free followers", "casino")
@@ -56,6 +58,22 @@ def _is_verified(post: Post) -> bool:
     return False
 
 
+def _created_at(post: Post) -> datetime:
+    raw = str(post.created_at or "").strip()
+    if not raw:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    try:
+        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            value = datetime.strptime(raw, "%a %b %d %H:%M:%S %z %Y")
+        except ValueError:
+            return datetime.min.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _score(post: Post, topic: DiscoveryTopic) -> int:
     text = post.text.lower()
     score = min(sum(1 for keyword in topic.keywords if keyword in text), 3) * 3
@@ -82,13 +100,12 @@ def _score(post: Post, topic: DiscoveryTopic) -> int:
 
 
 def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts: int = 5) -> list[tuple[Post, str, int]]:
-    """Find up to five random, verified posts from non-monitored accounts across the discovery topics."""
+    """Find the newest qualifying post from up to max_posts discovery topics."""
     topics = list(DISCOVERY_TOPICS)
     random.shuffle(topics)
 
     monitored = {handle.lstrip("@").lower() for handle in monitored_handles}
-    candidates: dict[str, tuple[Post, str, int]] = {}
-    used_topics: set[str] = set()
+    candidates: list[tuple[Post, str, int]] = []
 
     for topic in topics:
         if len(candidates) >= max_posts:
@@ -110,15 +127,9 @@ def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts:
                 continue
             topic_candidates.append((post, topic.name, score))
 
-        random.shuffle(topic_candidates)
-        for candidate in topic_candidates:
-            post, topic_name, score = candidate
-            if post.id in candidates:
-                continue
-            candidates[post.id] = candidate
-            used_topics.add(topic_name)
-            break
+        if topic_candidates:
+            newest = max(topic_candidates, key=lambda item: _created_at(item[0]))
+            candidates.append(newest)
 
-    pool = list(candidates.values())
-    random.shuffle(pool)
-    return pool[: min(max_posts, len(pool))]
+    candidates.sort(key=lambda item: _created_at(item[0]), reverse=True)
+    return candidates[:max_posts]
