@@ -13,8 +13,8 @@ from bot.x.provider import get_x_provider
 
 logger = logging.getLogger(__name__)
 
-# Production feed allocation per scheduled run: 7 monitored handles + 2 discovery topics.
-MONITORED_HANDLES_PER_RUN = 7
+# Production feed allocation per scheduled run: 8 monitored handles + 2 discovery topics.
+MONITORED_HANDLES_PER_RUN = 8
 MAX_DISCOVERY_POSTS_PER_RUN = 2
 SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (19, 0))
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
