@@ -141,7 +141,7 @@ def test_monitored_pool_randomizes_full_account_list():
 
     assert len(selected) == 20
     assert set(selected) == set(accounts)
-    assert MONITORED_HANDLES_PER_RUN == 7
+    assert MONITORED_HANDLES_PER_RUN == 8
 
 
 def test_monitored_handle_selects_newest_qualifying_post_since_scan():
@@ -332,7 +332,7 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
 
     assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN
     assert len(discovery_posts) == 2
-    assert len(telegram_posts) == 9
-    assert len(saved_replies) == 9
+    assert len(telegram_posts) == 10
+    assert len(saved_replies) == 10
     assert any(item["event_type"] == "scan_checkpoint" for item in db.activities)
     assert not any(item["event_type"] == "error" for item in db.activities)
