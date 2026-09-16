@@ -3,9 +3,8 @@ name: X-Bot Scheduler
 on:
   workflow_dispatch:
   schedule:
-    - cron: "7 11 * * *"
-    - cron: "7 14 * * *"
-    - cron: "7 19 * * *"
+    - cron: "0 6 * * *"
+    - cron: "0 16 * * *"
 
 concurrency:
   group: x-bot-scheduler
