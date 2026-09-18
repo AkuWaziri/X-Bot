@@ -1,10 +1,19 @@
 import asyncio
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from bot.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-from bot.db import get_db, get_pending_reply, mark_reply_rejected, mark_reply_selected, record_activity
+from bot.db import (
+    get_db,
+    get_pending_reply,
+    mark_reply_posted,
+    mark_reply_rejected,
+    mark_reply_selected,
+    mark_reply_pending,
+    record_activity,
+)
+from bot.x.provider import get_x_provider
 
 
 def _authorized(update: Update) -> bool:
@@ -71,6 +80,73 @@ def send_new_post(
     asyncio.run(_send())
 
 
+def _parse_callback_data(data: str) -> tuple[str, int | None, str] | None:
+    parts = data.split(":")
+    if len(parts) == 3 and parts[0] == "select" and parts[1] in {"1", "2", "3"}:
+        return "select", int(parts[1]), parts[2]
+    if len(parts) == 2 and parts[0] == "reject" and parts[1]:
+        return "reject", None, parts[1]
+    return None
+
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if query is None:
+        return
+
+    await query.answer()
+
+    if not _authorized(update):
+        return
+
+    parsed = _parse_callback_data(str(query.data or ""))
+    if parsed is None:
+        await query.answer("Invalid button action", show_alert=True)
+        return
+
+    action, reply_number, post_id = parsed
+    db = get_db()
+
+    if action == "reject":
+        pending = get_pending_reply(db, post_id)
+        if pending is None:
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.answer("Reply options are no longer pending")
+            return
+        mark_reply_rejected(db, post_id)
+        record_activity(db, "reply_rejected", pending.get("handle", ""), post_id, "Manual reply rejected")
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.answer("Reply rejected")
+        return
+
+    pending = get_pending_reply(db, post_id)
+    if pending is None:
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.answer("Reply options are no longer pending")
+        return
+
+    reply_text = str(pending.get(f"reply_{reply_number}") or "").strip()
+    if not reply_text:
+        await query.answer("Selected reply is missing", show_alert=True)
+        return
+
+    mark_reply_selected(db, post_id, int(reply_number))
+    try:
+        result = get_x_provider().create_reply(reply_text, post_id)
+        reply_id = str(result.get("id") or result.get("reply_id") or "").strip() or None
+        reply_url = str(result.get("url") or result.get("reply_url") or "").strip() or None
+        mark_reply_posted(db, post_id, reply_id=reply_id, reply_url=reply_url)
+        record_activity(db, "reply_posted", pending.get("handle", ""), post_id, f"Manual reply {reply_number} posted")
+    except Exception as exc:
+        mark_reply_pending(db, post_id)
+        record_activity(db, "reply_failed", pending.get("handle", ""), post_id, f"Manual reply failed: {exc}")
+        await query.answer("Reply failed — try again", show_alert=True)
+        return
+
+    await query.edit_message_reply_markup(reply_markup=None)
+    await query.answer(f"Reply {reply_number} posted")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
@@ -90,4 +166,5 @@ def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
+    application.add_handler(CallbackQueryHandler(button_callback))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
