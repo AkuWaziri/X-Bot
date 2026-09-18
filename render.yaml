@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: x-bot-telegram
     runtime: python
     buildCommand: pip install -r requirements.txt
@@ -21,3 +21,5 @@ services:
         sync: false
       - key: X_PROVIDER_MODE
         value: fxtwitter
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
