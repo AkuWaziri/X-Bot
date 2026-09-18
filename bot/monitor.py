@@ -10,6 +10,7 @@ from bot.discovery import discover_posts
 from bot.reply_engine import generate_replies, validate_replies
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
+from bot.x.twscrape import TwscrapeBlockedError
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +172,8 @@ def _process_post(db, post, handle: str, *, source: str) -> str:
 def _process_handle(db, provider, handle: str, scan_start: datetime, now: datetime) -> str:
     try:
         posts = provider.get_latest_posts(handle, limit=20)
+    except TwscrapeBlockedError:
+        raise
     except Exception as exc:
         if _is_missing_account_error(exc):
             logger.warning("SKIP ACCOUNT | %s | TwitterAPIs could not resolve this account", handle)
@@ -258,7 +261,12 @@ def run_monitor_cycle() -> None:
     for handle in _select_handles(accounts):
         if monitored_sent >= MONITORED_HANDLES_PER_RUN:
             break
-        result = _process_handle(db, provider, handle, scan_start, now)
+        try:
+            result = _process_handle(db, provider, handle, scan_start, now)
+        except TwscrapeBlockedError as exc:
+            logger.error("X PROVIDER BLOCKED | stopping cycle immediately: %s", exc)
+            record_activity(db, "x_provider_blocked", handle, None, str(exc)[:500])
+            return
         if result == "error":
             had_error = True
         elif result == "sent":
