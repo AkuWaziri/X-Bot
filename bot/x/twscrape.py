@@ -28,6 +28,26 @@ class TwscrapeProvider(XProvider):
             f"ct0={TWITTERAPIS_CT0}"
         )
 
+    async def _preflight(self, handle: str) -> None:
+        """Check X directly before twscrape can lock the only account and wait."""
+        import httpx
+
+        username = handle.lstrip("@").strip()
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Cookie": self._cookies(),
+        }
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(
+                f"https://x.com/{username}",
+                headers=headers,
+                timeout=self.REQUEST_TIMEOUT_SECONDS,
+            )
+        if response.status_code in {401, 403, 429}:
+            raise TwscrapeBlockedError(
+                f"X preflight blocked the twscrape session: HTTP {response.status_code}"
+            )
+
     @staticmethod
     def _to_post(tweet: Any) -> Post | None:
         tweet_id = str(getattr(tweet, "id_str", "") or getattr(tweet, "id", "")).strip()
@@ -61,6 +81,8 @@ class TwscrapeProvider(XProvider):
 
     async def _latest(self, handle: str, limit: int) -> list[Post]:
         from twscrape import API, gather
+
+        await self._preflight(handle)
 
         api = API()
         await api.pool.add_account_cookies("xbot_session", self._cookies())
