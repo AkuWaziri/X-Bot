@@ -17,7 +17,7 @@ X_PROVIDER_MODE = os.getenv("X_PROVIDER_MODE", "twitterapis").strip().lower()
 
 CHECK_INTERVAL_MINUTES = int(os.getenv("CHECK_INTERVAL_MINUTES", "10"))
 MIN_REPLY_CHARS = int(os.getenv("MIN_REPLY_CHARS", "10"))
-MAX_REPLY_CHARS = int(os.getenv("MAX_REPLY_CHARS", "100"))
+MAX_REPLY_CHARS = int(os.getenv("MAX_REPLY_CHARS", "50"))
 MAX_REPLIES_PER_USER_PER_DAY = int(os.getenv("MAX_REPLIES_PER_USER_PER_DAY", "1"))
 AUTO_REPLY = os.getenv("AUTO_REPLY", "false").lower() == "true"
 
