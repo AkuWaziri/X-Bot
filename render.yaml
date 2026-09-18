@@ -1,0 +1,23 @@
+services:
+  - type: worker
+    name: x-bot-telegram
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m bot.telegram
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: TWITTERAPIS_X_AUTH_TOKEN
+        sync: false
+      - key: TWITTERAPIS_CT0
+        sync: false
+      - key: X_PROVIDER_MODE
+        value: fxtwitter
