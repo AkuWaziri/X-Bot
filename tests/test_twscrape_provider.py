@@ -68,6 +68,6 @@ def test_discovery_verification_accepts_model_objects():
         username="verified",
         created_at="2026-09-10T12:34:00+00:00",
         url="https://x.com/verified/status/456",
-        raw=VerifiedTweet().__dict__,
+        raw={"author": VerifiedUser()},
     )
     assert _is_verified(post) is True
