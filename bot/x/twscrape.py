@@ -4,6 +4,23 @@ from typing import Any
 from bot.config import TWITTERAPIS_CT0, TWITTERAPIS_X_AUTH_TOKEN
 from bot.x.base import Post, XProvider
 
+GQL_FEATURES = {
+    "responsive_web_edit_tweet_api_enabled": True,
+    "graphql_is_translatable_rweb_tweet_is_translatable_enabled": True,
+    "responsive_web_graphql_exclude_directive_enabled": True,
+    "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
+    "longform_notetweets_consumption_enabled": True,
+    "longform_notetweets_inline_media_enabled": True,
+    "view_counts_everywhere_api_enabled": True,
+    "tweetypie_unmention_optimization_enabled": True,
+    "standardized_nudges_misinfo": True,
+    "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": True,
+    "tweet_with_visibility_results_prefer_gql_media_interstitial_enabled": False,
+    "responsive_web_enhance_cards_enabled": False,
+    "rweb_video_screen_enabled": True,
+}
+
+
 
 class TwscrapeBlockedError(RuntimeError):
     """Raised when X blocks the twscrape session and the cycle must stop immediately."""
@@ -149,7 +166,70 @@ class TwscrapeProvider(XProvider):
         except Exception as exc:
             raise RuntimeError(f"Twscrape provider failed: {exc}") from exc
 
-    def create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
-        raise RuntimeError(
-            "TwscrapeProvider is read-only; reply publishing remains disabled"
+    async def _create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
+        import httpx
+        from twscrape.account import TOKEN
+
+        query_id = "7TKRKCPuAGsmYde0CudbVg"
+        payload = {
+            "variables": {
+                "tweet_text": text,
+                "dark_request": False,
+                "reply": {
+                    "in_reply_to_tweet_id": str(reply_to),
+                    "exclude_reply_user_ids": [],
+                },
+                "media": {
+                    "media_entities": [],
+                    "possibly_sensitive": False,
+                },
+                "semantic_annotation_ids": [],
+            },
+            "features": GQL_FEATURES,
+            "queryId": query_id,
+        }
+        headers = {
+            "Authorization": TOKEN,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-CSRF-Token": TWITTERAPIS_CT0,
+            "X-Twitter-Auth-Type": "OAuth2Session",
+            "X-Twitter-Active-User": "yes",
+            "Origin": "https://x.com",
+            "Referer": "https://x.com/compose/post",
+            "User-Agent": "Mozilla/5.0",
+            "Cookie": self._cookies(),
+        }
+
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.post(
+                f"https://x.com/i/api/graphql/{query_id}/CreateTweet",
+                headers=headers,
+                json=payload,
+                timeout=self.REQUEST_TIMEOUT_SECONDS,
+            )
+
+        if response.status_code in {401, 403, 429}:
+            raise TwscrapeBlockedError(
+                f"X reply publishing blocked: HTTP {response.status_code}"
+            )
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"X reply publishing failed: HTTP {response.status_code}: {response.text[:500]}"
+            )
+
+        data = response.json()
+        result = (
+            data.get("data", {})
+            .get("create_tweet", {})
+            .get("tweet_results", {})
+            .get("result", {})
         )
+        reply_id = str(result.get("rest_id") or "").strip()
+        if not reply_id:
+            raise RuntimeError(f"X reply publishing returned no tweet id: {data}")
+
+        return {"id": reply_id, "tweet_id": reply_id}
+
+    def create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
+        return asyncio.run(self._create_reply(text, reply_to))
