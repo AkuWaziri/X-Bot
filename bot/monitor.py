@@ -116,7 +116,7 @@ def _is_missing_account_error(exc: Exception) -> bool:
     return "TwitterAPIs HTTP 404:" in str(exc)
 
 
-def _process_post(db, provider, post, handle: str, *, source: str) -> str:
+def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
     if post_seen(db, post.id) and telegram_already_sent(db, post.id):
         logger.info("SEEN | %s | %s", handle, post.id)
         return "skipped"
@@ -156,6 +156,8 @@ def _process_post(db, provider, post, handle: str, *, source: str) -> str:
     if AUTO_REPLY:
         try:
             candidate_reply = random.choice(replies)
+            if provider is None:
+                raise RuntimeError("X provider is required for automatic replies")
             result = provider.create_reply(candidate_reply, post.id)
             auto_reply_text = candidate_reply
             reply_id = str(result.get("tweet_id") or result.get("id") or "").strip()
@@ -219,7 +221,9 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
         logger.info("NO FEED | %s | no new qualifying post since last scan", handle)
         return "skipped"
 
-    return _process_post(db, provider, newest, handle, source="monitored account")
+    if AUTO_REPLY:
+        return _process_post(db, newest, handle, source="monitored account", provider=provider)
+    return _process_post(db, newest, handle, source="monitored account")
 
 
 def _run_discovery(db, provider, accounts: list[str], scan_start: datetime, now: datetime) -> tuple[int, bool]:
@@ -245,7 +249,10 @@ def _run_discovery(db, provider, accounts: list[str], scan_start: datetime, now:
             continue
         handle = f"@{post.username.lstrip('@')}"
         logger.info("DISCOVERY | %s | score=%d | %s", topic, score, handle)
-        result = _process_post(db, provider, post, handle, source=f"discovery:{topic}")
+        if AUTO_REPLY:
+            result = _process_post(db, post, handle, source=f"discovery:{topic}", provider=provider)
+        else:
+            result = _process_post(db, post, handle, source=f"discovery:{topic}")
         if result == "error":
             had_error = True
         elif result == "sent":
