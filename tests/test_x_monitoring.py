@@ -202,9 +202,13 @@ def test_twscrape_block_stops_cycle_without_checkpoint(monkeypatch):
     db = IntegrationDB()
     activity = []
 
+    class BlockedProvider:
+        def get_latest_posts(self, handle, limit=20):
+            raise TwscrapeBlockedError("X blocked the twscrape session (403/Cloudflare)")
+
     monkeypatch.setenv("TEST_MODE", "true")
     monkeypatch.setattr("bot.monitor.load_accounts", lambda: accounts)
-    monkeypatch.setattr("bot.monitor.get_x_provider", lambda: FakeErrorProvider("403 Forbidden from Cloudflare"))
+    monkeypatch.setattr("bot.monitor.get_x_provider", lambda: BlockedProvider())
     monkeypatch.setattr("bot.monitor.get_db", lambda: db)
     monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
 
@@ -212,7 +216,6 @@ def test_twscrape_block_stops_cycle_without_checkpoint(monkeypatch):
 
     assert any(item[1] == "x_provider_blocked" for item in activity)
     assert not any(item[1] == "scan_checkpoint" for item in activity)
-
 
 def test_non_404_provider_failure_remains_hard_error(monkeypatch):
     activity = []
