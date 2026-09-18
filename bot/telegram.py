@@ -38,6 +38,9 @@ def send_new_post(
     replies = suggested_replies or ([] if not suggested_reply else [suggested_reply])
     reply_markup = None
 
+    if auto_reply_text:
+        message += f"\n\n🤖 AUTO REPLY SENT\n{auto_reply_text}"
+
     if replies:
         message += "\n\n💬 REPLY OPTIONS"
         for index, reply in enumerate(replies[:3], start=1):
