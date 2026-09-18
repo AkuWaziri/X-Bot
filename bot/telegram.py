@@ -21,6 +21,7 @@ def send_new_post(
     reply_reason: str | None = None,
     post_id: str | None = None,
     suggested_replies: list[str] | None = None,
+    auto_reply_text: str | None = None,
 ) -> None:
     """Send a newly detected X post and up to three reply suggestions to Telegram."""
     if not TELEGRAM_BOT_TOKEN:
