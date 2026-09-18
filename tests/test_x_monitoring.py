@@ -15,6 +15,7 @@ from bot.monitor import (
     run_monitor_cycle,
 )
 from bot.x.base import Post
+from bot.x.fxtwitter import FxTwitterProvider
 from bot.x.mock import MockXProvider
 from bot.x.twscrape import TwscrapeBlockedError
 from bot.x.twitterapis import TwitterAPIsProvider
@@ -87,6 +88,33 @@ class IntegrationTable:
         return type("Result", (), {"data": []})()
 
 
+def test_fxtwitter_status_mapping():
+    item = {
+        "type": "status",
+        "id": "123",
+        "url": "https://x.com/alice/status/123",
+        "text": "hello",
+        "created_at": "2026-09-18T17:00:00.000Z",
+        "likes": 12,
+        "reposts": 3,
+        "replies": 2,
+        "author": {
+            "id": "1",
+            "name": "Alice",
+            "screen_name": "alice",
+            "verification": {"verified": True, "type": "individual"},
+        },
+    }
+
+    post = FxTwitterProvider._to_post(item)
+
+    assert post is not None
+    assert post.id == "123"
+    assert post.username == "alice"
+    assert post.text == "hello"
+    assert post.raw["author"]["is_verified"] is True
+
+
 def test_twitter_timestamp_format_is_supported():
     parsed = _parse_created_at("Tue Sep 08 15:23:11 +0000 2026")
     assert parsed == datetime(2026, 9, 8, 15, 23, 11, tzinfo=timezone.utc)
@@ -143,6 +171,7 @@ def test_monitored_pool_randomizes_full_account_list():
     assert len(selected) == 20
     assert set(selected) == set(accounts)
     assert MONITORED_HANDLES_PER_RUN == 10
+
 
 
 def test_monitored_handle_selects_newest_qualifying_post_since_scan():
