@@ -4,22 +4,6 @@ from typing import Any
 from bot.config import TWITTERAPIS_CT0, TWITTERAPIS_X_AUTH_TOKEN
 from bot.x.base import Post, XProvider
 
-GQL_FEATURES = {
-    "responsive_web_edit_tweet_api_enabled": True,
-    "graphql_is_translatable_rweb_tweet_is_translatable_enabled": True,
-    "responsive_web_graphql_exclude_directive_enabled": True,
-    "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
-    "longform_notetweets_consumption_enabled": True,
-    "longform_notetweets_inline_media_enabled": True,
-    "view_counts_everywhere_api_enabled": True,
-    "tweetypie_unmention_optimization_enabled": True,
-    "standardized_nudges_misinfo": True,
-    "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": True,
-    "tweet_with_visibility_results_prefer_gql_media_interstitial_enabled": False,
-    "responsive_web_enhance_cards_enabled": False,
-    "rweb_video_screen_enabled": True,
-}
-
 
 
 class TwscrapeBlockedError(RuntimeError):
@@ -169,6 +153,7 @@ class TwscrapeProvider(XProvider):
     async def _create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
         import httpx
         from twscrape.account import TOKEN
+        from twscrape.api import GQL_FEATURES
 
         query_id = "7TKRKCPuAGsmYde0CudbVg"
         payload = {
