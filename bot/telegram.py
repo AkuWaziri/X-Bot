@@ -101,7 +101,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     parsed = _parse_callback_data(str(query.data or ""))
     if parsed is None:
-        await query.answer("Invalid button action", show_alert=True)
         return
 
     action, reply_number, post_id = parsed
@@ -111,12 +110,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         pending = get_pending_reply(db, post_id)
         if pending is None:
             await query.edit_message_reply_markup(reply_markup=None)
-            await query.answer("Reply options are no longer pending")
             return
         mark_reply_rejected(db, post_id)
         record_activity(db, "reply_rejected", pending.get("handle", ""), post_id, "Manual reply rejected")
         await query.edit_message_reply_markup(reply_markup=None)
-        await query.answer("Reply rejected")
         return
 
     pending = get_pending_reply(db, post_id)
@@ -127,7 +124,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     reply_text = str(pending.get(f"reply_{reply_number}") or "").strip()
     if not reply_text:
-        await query.answer("Selected reply is missing", show_alert=True)
         return
 
     mark_reply_selected(db, post_id, int(reply_number))
@@ -140,11 +136,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception as exc:
         mark_reply_pending(db, post_id)
         record_activity(db, "reply_failed", pending.get("handle", ""), post_id, f"Manual reply failed: {exc}")
-        await query.answer("Reply failed — try again", show_alert=True)
         return
 
     await query.edit_message_reply_markup(reply_markup=None)
-    await query.answer(f"Reply {reply_number} posted")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
