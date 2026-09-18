@@ -5,6 +5,10 @@ from bot.config import TWITTERAPIS_CT0, TWITTERAPIS_X_AUTH_TOKEN
 from bot.x.base import Post, XProvider
 
 
+class TwscrapeBlockedError(RuntimeError):
+    """Raised when X blocks the twscrape session and the cycle must stop immediately."""
+
+
 class TwscrapeProvider(XProvider):
     """Free X read provider using an authenticated X session via twscrape."""
 
@@ -102,10 +106,19 @@ class TwscrapeProvider(XProvider):
                 break
         return posts
 
+    @staticmethod
+    def _is_blocked_error(exc: Exception) -> bool:
+        message = str(exc).lower()
+        return "403" in message or "forbidden" in message or "cloudflare" in message
+
     def get_latest_posts(self, handle: str, limit: int = 20) -> list[Post]:
         try:
             return asyncio.run(self._latest(handle, limit))
         except Exception as exc:
+            if self._is_blocked_error(exc):
+                raise TwscrapeBlockedError(
+                    f"X blocked the twscrape session (403/Cloudflare): {exc}"
+                ) from exc
             raise RuntimeError(f"Twscrape provider failed: {exc}") from exc
 
     def search_posts(self, query: str, limit: int = 20) -> list[Post]:
