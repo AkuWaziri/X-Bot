@@ -4,13 +4,14 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from bot.accounts import load_accounts
-from bot.config import AUTO_REPLY
+from bot.config import AUTO_REPLY, TWITTERAPIS_API_KEY
 from bot.db import get_db, post_seen, record_activity, save_pending_replies, save_post
 from bot.discovery import discover_posts
 from bot.reply_engine import generate_replies, validate_replies
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
 from bot.x.twscrape import TwscrapeBlockedError
+from bot.x.twitterapis import TwitterAPIsProvider
 
 logger = logging.getLogger(__name__)
 
@@ -152,15 +153,34 @@ def _process_post(db, post, handle: str, *, source: str) -> str:
 
     record_activity(db, "replies_suggested", handle, post.id, f"Three reply suggestions generated from {source}")
 
+    auto_reply_text = None
     if AUTO_REPLY:
-        logger.warning("AUTO_REPLY is enabled but manual three-choice mode is required; skipping automatic post for %s", post.id)
+        if not TWITTERAPIS_API_KEY:
+            logger.error("AUTO_REPLY enabled but TWITTERAPIS_API_KEY is not configured for %s", post.id)
+            record_activity(db, "auto_reply_skipped", handle, post.id, "Automatic reply requires TWITTERAPIS_API_KEY")
+        else:
+            try:
+                reply_provider = TwitterAPIsProvider(TWITTERAPIS_API_KEY)
+                auto_reply_text = random.choice(replies)
+                result = reply_provider.create_reply(auto_reply_text, post.id)
+                reply_id = str(result.get("tweet_id") or result.get("id") or "").strip()
+                record_activity(
+                    db,
+                    "auto_reply_posted",
+                    handle,
+                    post.id,
+                    f"Automatic reply posted: {auto_reply_text}" + (f" | reply_id={reply_id}" if reply_id else ""),
+                )
+            except Exception as exc:
+                logger.exception("Automatic reply failed for %s", post.id)
+                record_activity(db, "auto_reply_error", handle, post.id, str(exc)[:500])
     else:
         save_pending_replies(db, post.id, handle, post.text, replies)
 
     try:
         if telegram_already_sent(db, post.id):
             return "skipped"
-        send_new_post(handle, post.text, post.url, suggested_replies=replies, post_id=post.id)
+        send_new_post(handle, post.text, post.url, suggested_replies=None if auto_reply_text else replies, post_id=None if auto_reply_text else post.id, auto_reply_text=auto_reply_text)
         record_activity(db, "telegram_sent", handle, post.id, f"Post notification sent to Telegram from {source}")
         return "sent"
     except Exception:
