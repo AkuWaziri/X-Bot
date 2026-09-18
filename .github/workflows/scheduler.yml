@@ -3,7 +3,8 @@ name: X-Bot Scheduler
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */5 * * *"
+    # Run every 5 hours at the top of the hour.
+    - cron: "0 0,5,10,15,20 * * *"
 
 concurrency:
   group: x-bot-scheduler
@@ -12,6 +13,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       PYTHONPATH: .
     steps:
