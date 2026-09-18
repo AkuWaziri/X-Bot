@@ -8,6 +8,8 @@ from bot.x.base import Post, XProvider
 class TwscrapeProvider(XProvider):
     """Free X read provider using an authenticated X session via twscrape."""
 
+    REQUEST_TIMEOUT_SECONDS = 20
+
     def __init__(self) -> None:
         if not TWITTERAPIS_X_AUTH_TOKEN or not TWITTERAPIS_CT0:
             raise ValueError(
@@ -60,11 +62,16 @@ class TwscrapeProvider(XProvider):
         await api.pool.add_account_cookies("xbot_session", self._cookies())
 
         username = handle.lstrip("@").strip()
-        user = await api.user_by_login(username)
+        user = await asyncio.wait_for(
+            api.user_by_login(username), timeout=self.REQUEST_TIMEOUT_SECONDS
+        )
         if user is None:
             return []
 
-        tweets = await gather(api.user_tweets(user.id, limit=max(limit, 20)))
+        tweets = await asyncio.wait_for(
+            gather(api.user_tweets(user.id, limit=max(limit, 20))),
+            timeout=self.REQUEST_TIMEOUT_SECONDS,
+        )
         posts: list[Post] = []
         for tweet in tweets:
             post = self._to_post(tweet)
@@ -81,7 +88,10 @@ class TwscrapeProvider(XProvider):
         api = API()
         await api.pool.add_account_cookies("xbot_session", self._cookies())
 
-        tweets = await gather(api.search(query, limit=max(limit, 20)))
+        tweets = await asyncio.wait_for(
+            gather(api.search(query, limit=max(limit, 20))),
+            timeout=self.REQUEST_TIMEOUT_SECONDS,
+        )
         posts: list[Post] = []
         for tweet in tweets:
             post = self._to_post(tweet)
