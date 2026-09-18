@@ -43,12 +43,28 @@ def _engagement(post: Post) -> int:
 
 
 def _is_verified(post: Post) -> bool:
-    """Accept X verified/check-mark signals used by different API response shapes."""
+    """Accept X verified/check-mark signals from dicts and twscrape model objects."""
     raw = post.raw or {}
     author = raw.get("author") or raw.get("user") or {}
+
+    def _get(obj, key):
+        if isinstance(obj, dict):
+            return obj.get(key)
+        return getattr(obj, key, None)
+
     values = (
-        raw.get("verified"), raw.get("is_verified"), raw.get("verified_type"), raw.get("verification_type"), raw.get("blue_verified"), raw.get("is_blue_verified"),
-        author.get("verified"), author.get("is_verified"), author.get("verified_type"), author.get("verification_type"), author.get("blue_verified"), author.get("is_blue_verified"),
+        _get(raw, "verified"),
+        _get(raw, "is_verified"),
+        _get(raw, "verified_type"),
+        _get(raw, "verification_type"),
+        _get(raw, "blue_verified"),
+        _get(raw, "is_blue_verified"),
+        _get(author, "verified"),
+        _get(author, "is_verified"),
+        _get(author, "verified_type"),
+        _get(author, "verification_type"),
+        _get(author, "blue_verified"),
+        _get(author, "is_blue_verified"),
     )
     for value in values:
         if isinstance(value, bool) and value:
