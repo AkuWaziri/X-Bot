@@ -43,6 +43,10 @@ def test_twscrape_filters_retweets():
     assert TwscrapeProvider._to_post(tweet) is None
 
 
+def test_twscrape_request_timeout_is_bounded():
+    assert TwscrapeProvider.REQUEST_TIMEOUT_SECONDS == 20
+
+
 def test_twscrape_requires_existing_session(monkeypatch):
     monkeypatch.setattr("bot.x.twscrape.TWITTERAPIS_X_AUTH_TOKEN", "")
     monkeypatch.setattr("bot.x.twscrape.TWITTERAPIS_CT0", "")
