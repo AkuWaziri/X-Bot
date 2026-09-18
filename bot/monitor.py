@@ -4,14 +4,13 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from bot.accounts import load_accounts
-from bot.config import AUTO_REPLY, TWITTERAPIS_API_KEY
+from bot.config import AUTO_REPLY
 from bot.db import get_db, post_seen, record_activity, save_pending_replies, save_post
 from bot.discovery import discover_posts
 from bot.reply_engine import generate_replies, validate_replies
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
 from bot.x.twscrape import TwscrapeBlockedError
-from bot.x.twitterapis import TwitterAPIsProvider
 
 logger = logging.getLogger(__name__)
 
@@ -155,25 +154,20 @@ def _process_post(db, post, handle: str, *, source: str) -> str:
 
     auto_reply_text = None
     if AUTO_REPLY:
-        if not TWITTERAPIS_API_KEY:
-            logger.error("AUTO_REPLY enabled but TWITTERAPIS_API_KEY is not configured for %s", post.id)
-            record_activity(db, "auto_reply_skipped", handle, post.id, "Automatic reply requires TWITTERAPIS_API_KEY")
-        else:
-            try:
-                reply_provider = TwitterAPIsProvider(TWITTERAPIS_API_KEY)
-                auto_reply_text = random.choice(replies)
-                result = reply_provider.create_reply(auto_reply_text, post.id)
-                reply_id = str(result.get("tweet_id") or result.get("id") or "").strip()
-                record_activity(
-                    db,
-                    "auto_reply_posted",
-                    handle,
-                    post.id,
-                    f"Automatic reply posted: {auto_reply_text}" + (f" | reply_id={reply_id}" if reply_id else ""),
-                )
-            except Exception as exc:
-                logger.exception("Automatic reply failed for %s", post.id)
-                record_activity(db, "auto_reply_error", handle, post.id, str(exc)[:500])
+        try:
+            auto_reply_text = random.choice(replies)
+            result = provider.create_reply(auto_reply_text, post.id)
+            reply_id = str(result.get("tweet_id") or result.get("id") or "").strip()
+            record_activity(
+                db,
+                "auto_reply_posted",
+                handle,
+                post.id,
+                f"Automatic reply posted: {auto_reply_text}" + (f" | reply_id={reply_id}" if reply_id else ""),
+            )
+        except Exception as exc:
+            logger.exception("Automatic reply failed for %s", post.id)
+            record_activity(db, "auto_reply_error", handle, post.id, str(exc)[:500])
     else:
         save_pending_replies(db, post.id, handle, post.text, replies)
 
