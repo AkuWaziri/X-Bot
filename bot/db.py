@@ -90,6 +90,10 @@ def mark_reply_rejected(db: Client, post_id: str) -> None:
     db.table("pending_replies").update({"status": "rejected"}).eq("post_id", post_id).eq("status", "pending").execute()
 
 
+def mark_reply_pending(db: Client, post_id: str) -> None:
+    db.table("pending_replies").update({"selected_reply": None, "status": "pending"}).eq("post_id", post_id).eq("status", "selected").execute()
+
+
 def record_activity(db: Client, event_type: str, handle: str, post_id: str | None, message: str) -> None:
     db.table("activity_log").insert(
         {
