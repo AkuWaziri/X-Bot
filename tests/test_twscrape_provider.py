@@ -48,3 +48,26 @@ def test_twscrape_requires_existing_session(monkeypatch):
     monkeypatch.setattr("bot.x.twscrape.TWITTERAPIS_CT0", "")
     with pytest.raises(ValueError, match="requires the existing"):
         TwscrapeProvider()
+
+
+class VerifiedUser:
+    username = "verified"
+    verified = True
+
+
+class VerifiedTweet(FakeTweet):
+    user = VerifiedUser()
+
+
+def test_discovery_verification_accepts_model_objects():
+    from bot.discovery import _is_verified
+
+    post = Post(
+        id="456",
+        text="verified post",
+        username="verified",
+        created_at="2026-09-10T12:34:00+00:00",
+        url="https://x.com/verified/status/456",
+        raw=VerifiedTweet().__dict__,
+    )
+    assert _is_verified(post) is True
