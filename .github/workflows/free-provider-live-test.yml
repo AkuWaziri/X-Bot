@@ -33,3 +33,5 @@ jobs:
           X_PROVIDER_MODE: twscrape
           AUTO_REPLY: "false"
         run: python -m bot.monitor
+      - name: Mark test
+        run: echo "free-provider-live-test"
