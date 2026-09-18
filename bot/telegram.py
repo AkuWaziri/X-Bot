@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
@@ -119,7 +120,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     pending = get_pending_reply(db, post_id)
     if pending is None:
         await query.edit_message_reply_markup(reply_markup=None)
-        await query.answer("Reply options are no longer pending")
         return
 
     reply_text = str(pending.get(f"reply_{reply_number}") or "").strip()
@@ -157,8 +157,28 @@ def main() -> None:
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured")
 
+    port = int(os.getenv("PORT", "10000"))
+    base_url = (os.getenv("WEBHOOK_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
+    if not base_url:
+        raise RuntimeError("WEBHOOK_URL or RENDER_EXTERNAL_URL is required for webhook mode")
+
+    webhook_url = f"{base_url}/telegram"
+    secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CallbackQueryHandler(button_callback))
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path="telegram",
+        webhook_url=webhook_url,
+        allowed_updates=Update.ALL_TYPES,
+        secret_token=secret_token,
+    )
+
+
+if __name__ == "__main__":
+    main()
