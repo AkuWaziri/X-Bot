@@ -16,6 +16,7 @@ from bot.monitor import (
 )
 from bot.x.base import Post
 from bot.x.mock import MockXProvider
+from bot.x.twscrape import TwscrapeBlockedError
 from bot.x.twitterapis import TwitterAPIsProvider
 
 
@@ -194,6 +195,23 @@ def test_unresolved_monitored_account_is_soft_skipped(monkeypatch):
     assert result == "skipped"
     assert activity
     assert activity[0][1] == "account_skipped"
+
+
+def test_twscrape_block_stops_cycle_without_checkpoint(monkeypatch):
+    accounts = ["@alice", "@bob", "@carol"]
+    db = IntegrationDB()
+    activity = []
+
+    monkeypatch.setenv("TEST_MODE", "true")
+    monkeypatch.setattr("bot.monitor.load_accounts", lambda: accounts)
+    monkeypatch.setattr("bot.monitor.get_x_provider", lambda: FakeErrorProvider("403 Forbidden from Cloudflare"))
+    monkeypatch.setattr("bot.monitor.get_db", lambda: db)
+    monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
+
+    run_monitor_cycle()
+
+    assert any(item[1] == "x_provider_blocked" for item in activity)
+    assert not any(item[1] == "scan_checkpoint" for item in activity)
 
 
 def test_non_404_provider_failure_remains_hard_error(monkeypatch):
