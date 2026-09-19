@@ -44,6 +44,6 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           X_PROVIDER_MODE: fxtwitter
-          AUTO_REPLY: "true"
+          AUTO_REPLY: "false"
           SCHEDULE_SLOT: ""
         run: python -m bot.monitor
