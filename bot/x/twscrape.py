@@ -154,6 +154,7 @@ class TwscrapeProvider(XProvider):
         import httpx
         from twscrape.account import TOKEN
         from twscrape.api import GQL_FEATURES
+        from twscrape.xclid import XClIdGen
 
         query_id = "7TKRKCPuAGsmYde0CudbVg"
         payload = {
@@ -173,8 +174,16 @@ class TwscrapeProvider(XProvider):
             "features": GQL_FEATURES,
             "queryId": query_id,
         }
+        transaction_id = await XClIdGen.create(cookies={
+            "auth_token": TWITTERAPIS_X_AUTH_TOKEN,
+            "ct0": TWITTERAPIS_CT0,
+        })
         headers = {
             "Authorization": TOKEN,
+            "x-client-transaction-id": transaction_id.calc(
+                "POST",
+                f"/i/api/graphql/{query_id}/CreateTweet",
+            ),
             "Content-Type": "application/json",
             "Accept": "application/json",
             "X-CSRF-Token": TWITTERAPIS_CT0,
@@ -212,7 +221,11 @@ class TwscrapeProvider(XProvider):
         )
         reply_id = str(result.get("rest_id") or "").strip()
         if not reply_id:
-            raise RuntimeError(f"X reply publishing returned no tweet id: {data}")
+            errors = data.get("errors") or []
+            raise RuntimeError(
+                "X reply publishing returned no tweet id: "
+                f"{data}; errors={errors}"
+            )
 
         return {"id": reply_id, "tweet_id": reply_id}
 
