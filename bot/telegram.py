@@ -129,7 +129,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     mark_reply_selected(db, post_id, int(reply_number))
     try:
-        result = get_x_provider().create_reply(reply_text, post_id)
+        result = await asyncio.to_thread(
+            get_x_provider().create_reply,
+            reply_text,
+            post_id,
+        )
         reply_id = str(result.get("id") or result.get("reply_id") or "").strip() or None
         reply_url = str(result.get("url") or result.get("reply_url") or "").strip() or None
         mark_reply_posted(db, post_id, reply_id=reply_id, reply_url=reply_url)
@@ -138,7 +142,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         mark_reply_pending(db, post_id)
         error_text = str(exc).strip() or exc.__class__.__name__
         record_activity(db, "reply_failed", pending.get("handle", ""), post_id, f"Manual reply failed: {error_text}")
-        await query.answer(f"Reply failed: {error_text[:180]}", show_alert=True)
+        try:
+            await query.message.reply_text(
+                "❌ REPLY FAILED\n\n"
+                f"{pending.get('handle', '')}\n\n"
+                f"{error_text[:1000]}\n\n"
+                "The reply remains pending. You can try another option."
+            )
+        except Exception:
+            pass
         return
 
     await query.edit_message_reply_markup(reply_markup=None)
