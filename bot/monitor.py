@@ -20,6 +20,7 @@ MAX_DISCOVERY_POSTS_PER_RUN = 10
 SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (19, 0))
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 SCAN_CHECKPOINT_EVENT = "scan_checkpoint"
+HANDLE_ROTATION_EVENT = "handle_rotation"
 
 
 def telegram_already_sent(db, post_id: str) -> bool:
@@ -105,10 +106,62 @@ def _is_recent_for_schedule(post, scan_start: datetime, now: datetime) -> bool:
 
 
 def _select_handles(accounts: list[str]) -> list[str]:
+    """Return all accounts in a randomized order for compatibility/tests."""
     candidates = list(accounts)
     random.shuffle(candidates)
     logger.info("Randomized monitored handle pool: %d handles", len(candidates))
     return candidates
+
+
+def _last_handle_rotation_cursor(db) -> int:
+    result = (
+        db.table("activity_log")
+        .select("message")
+        .eq("event_type", HANDLE_ROTATION_EVENT)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return 0
+
+    message = str(result.data[0].get("message") or "")
+    if not message.startswith("cursor="):
+        return 0
+
+    try:
+        return max(0, int(message.split("|", 1)[0][7:]))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _select_rotating_handles(db, accounts: list[str]) -> list[str]:
+    """Select the next rotating batch of monitored handles and persist the next cursor."""
+    ordered = sorted(dict.fromkeys(accounts), key=str.lower)
+    if not ordered:
+        return []
+
+    cursor = _last_handle_rotation_cursor(db) % len(ordered)
+    count = min(MONITORED_HANDLES_PER_RUN, len(ordered))
+    selected = [ordered[(cursor + offset) % len(ordered)] for offset in range(count)]
+    next_cursor = (cursor + count) % len(ordered)
+
+    record_activity(
+        db,
+        HANDLE_ROTATION_EVENT,
+        "SYSTEM",
+        None,
+        f"cursor={next_cursor}|selected={','.join(selected)}",
+    )
+    logger.info(
+        "ROTATING HANDLE POOL | start=%d | selected=%d/%d | next=%d | handles=%s",
+        cursor,
+        len(selected),
+        len(ordered),
+        next_cursor,
+        ", ".join(selected),
+    )
+    return selected
 
 
 def _is_missing_account_error(exc: Exception) -> bool:
@@ -280,9 +333,9 @@ def run_monitor_cycle() -> None:
     had_error = False
     monitored_sent = 0
 
-    for handle in _select_handles(accounts):
-        if monitored_sent >= MONITORED_HANDLES_PER_RUN:
-            break
+    rotating_handles = _select_rotating_handles(db, accounts)
+
+    for handle in rotating_handles:
         try:
             result = _process_handle(db, provider, handle, scan_start, now)
         except TwscrapeBlockedError as exc:
