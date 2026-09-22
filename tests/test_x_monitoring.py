@@ -173,6 +173,22 @@ def test_monitored_pool_randomizes_full_account_list():
     assert MONITORED_HANDLES_PER_RUN == 10
 
 
+def test_monitored_handles_rotate_between_schedules(monkeypatch):
+    from bot.monitor import _select_rotating_handles
+
+    accounts = [f"@user{i:02d}" for i in range(20)]
+    db = IntegrationDB()
+
+    first = _select_rotating_handles(db, accounts)
+    second = _select_rotating_handles(db, accounts)
+    third = _select_rotating_handles(db, accounts)
+
+    assert first == [f"@user{i:02d}" for i in range(10)]
+    assert second == [f"@user{i:02d}" for i in range(10, 20)]
+    assert third == first
+    assert set(first).isdisjoint(second)
+
+
 
 def test_monitored_handle_selects_newest_qualifying_post_since_scan():
     older_post = Post(
