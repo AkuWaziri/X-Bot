@@ -39,7 +39,7 @@ class MockXProvider(XProvider):
         topic_markers = (
             ("tokenized_stocks", ("tokenized stocks", "tokenized stock", "tokenized equities", "onchain stocks", "stock tokens")),
             ("ai_agents", ("ai agents", "ai agent", "agentic ai")),
-            ("claim_now", ("claim now", "claim your", "claim)")),
+            ("claim_now", ("claim now", "claim your", "claim)", "claim")),
             ("airdrop", ("airdrop", "testnet", "points")),
             ("rewards", ("rewards", "incentives")),
             ("security", ("security", "exploit", "hacked", "drained", "vulnerability")),
