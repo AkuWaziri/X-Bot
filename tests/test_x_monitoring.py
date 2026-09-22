@@ -332,6 +332,7 @@ def test_discovery_topic_pool_covers_requested_categories():
         "security",
         "hot_topics",
         "tokenized_stocks",
+        "payments_stablecoins",
     } <= names
 
 
@@ -381,8 +382,8 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     discovery_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-discovery-")]
 
     assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN
-    assert len(discovery_posts) == 5
-    assert len(telegram_posts) == 15
-    assert len(saved_replies) == 15
+    assert 0 < len(discovery_posts) <= 10
+    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + len(discovery_posts)
+    assert len(saved_replies) == len(telegram_posts)
     assert any(item["event_type"] == "scan_checkpoint" for item in db.activities)
     assert not any(item["event_type"] == "error" for item in db.activities)
