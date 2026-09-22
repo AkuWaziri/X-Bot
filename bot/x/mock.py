@@ -32,8 +32,8 @@ class MockXProvider(XProvider):
         """Return one stable, unique candidate per discovery topic.
 
         The real provider searches independently for each topic. The mock must do
-        the same so integration tests can reliably exercise the five-post
-        discovery cap without duplicate mock post IDs collapsing the result set.
+        the same so integration tests can reliably exercise the discovery pool
+        and 10-post final cap without duplicate mock post IDs collapsing the result set.
         """
         normalized = query.lower()
         topic_markers = (
@@ -46,6 +46,7 @@ class MockXProvider(XProvider):
             ("comics", ("crypto comic", "web3 comic", "crypto meme", "web3 meme")),
             ("hot_topics", ("trending", "hot topic", "viral", "breaking", "just in")),
             ("defi", ("defi", "decentralized finance", "dex", "lending", "liquidity")),
+            ("payments_stablecoins", ("payments", "stablecoin", "usdc", "usdt", "stable coins")),
         )
 
         slug = "crypto"
