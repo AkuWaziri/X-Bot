@@ -373,6 +373,29 @@ def test_last_scan_checkpoint_is_read_from_activity_log():
     assert _last_scan_checkpoint(db) == datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc)
 
 
+def test_discovery_fills_unmet_total_feed_target(monkeypatch):
+    accounts = [f"@integration{i}" for i in range(20)]
+    db = IntegrationDB()
+    captured = []
+
+    monkeypatch.setenv("TEST_MODE", "true")
+    monkeypatch.setattr("bot.monitor.load_accounts", lambda: accounts)
+    monkeypatch.setattr("bot.monitor.get_x_provider", lambda: object())
+    monkeypatch.setattr("bot.monitor.get_db", lambda: db)
+    monkeypatch.setattr("bot.monitor._process_handle", lambda *args: "skipped")
+    monkeypatch.setattr(
+        "bot.monitor._run_discovery",
+        lambda db, provider, accounts, scan_start, now, max_posts: captured.append(max_posts) or (max_posts, False),
+    )
+    monkeypatch.setattr("bot.monitor.record_activity", lambda db, event_type, handle, post_id, message: db.activities.append(
+        {"event_type": event_type, "handle": handle, "post_id": post_id, "message": message}
+    ))
+
+    run_monitor_cycle()
+
+    assert captured == [MONITORED_HANDLES_PER_RUN + 10]
+
+
 def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypatch):
     accounts = [f"@integration{i}" for i in range(20)]
     db = IntegrationDB()
