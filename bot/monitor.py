@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Production feed allocation per scheduled run: 10 monitored handles + 10 discovery posts.
 MONITORED_HANDLES_PER_RUN = 10
 MAX_DISCOVERY_POSTS_PER_RUN = 10
+DISCOVERY_CANDIDATE_POOL_SIZE = 30
 SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (19, 0))
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 SCAN_CHECKPOINT_EVENT = "scan_checkpoint"
@@ -280,7 +281,7 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
 
 
 def _run_discovery(db, provider, accounts: list[str], scan_start: datetime, now: datetime) -> tuple[int, bool]:
-    candidates = discover_posts(provider, accounts, max_posts=MAX_DISCOVERY_POSTS_PER_RUN)
+    candidates = discover_posts(provider, accounts, max_posts=DISCOVERY_CANDIDATE_POOL_SIZE)
     if not candidates:
         logger.info("Discovery found no qualifying non-monitored posts.")
         return 0, False
