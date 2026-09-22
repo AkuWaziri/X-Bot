@@ -77,6 +77,10 @@ class IntegrationTable:
     def limit(self, value):
         return self
 
+    def insert(self, row):
+        self.db.activities.append(row)
+        return self
+
     def execute(self):
         if self.name == "activity_log" and self.filters.get("event_type") == "schedule_processed":
             slot = self.filters.get("message")
@@ -398,8 +402,8 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     discovery_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-discovery-")]
 
     assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN
-    assert 0 < len(discovery_posts) <= 10
-    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + len(discovery_posts)
+    assert len(discovery_posts) == 10
+    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + 10
     assert len(saved_replies) == len(telegram_posts)
     assert any(item["event_type"] == "scan_checkpoint" for item in db.activities)
     assert not any(item["event_type"] == "error" for item in db.activities)
