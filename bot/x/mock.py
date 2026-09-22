@@ -59,7 +59,7 @@ class MockXProvider(XProvider):
         return [
             Post(
                 id=f"mock-discovery-{slug}",
-                text=f"Mock discovery opportunity about {slug}",
+                text=f"Mock discovery opportunity about {slug} crypto web3",
                 username=username,
                 created_at=(self.now - timedelta(minutes=3)).isoformat(),
                 url=f"https://x.com/{username}/status/mock-discovery-{slug}",
