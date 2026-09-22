@@ -89,6 +89,9 @@ class IntegrationTable:
         if self.name == "activity_log" and self.filters.get("event_type") == "scan_checkpoint":
             rows = [item for item in self.db.activities if item["event_type"] == "scan_checkpoint"]
             return type("Result", (), {"data": rows[-1:]})()
+        if self.name == "activity_log" and self.filters.get("event_type") == "handle_rotation":
+            rows = [item for item in self.db.activities if item["event_type"] == "handle_rotation"]
+            return type("Result", (), {"data": rows[-1:]})()
         return type("Result", (), {"data": []})()
 
 
