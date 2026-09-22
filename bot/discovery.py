@@ -23,6 +23,7 @@ DISCOVERY_TOPICS = (
     DiscoveryTopic("security", '("crypto security" OR "defi hack" OR exploit OR drained OR hacked OR vulnerability) (crypto OR defi OR web3)', ("security", "hack", "exploit", "drained", "hacked")),
     DiscoveryTopic("hot_topics", '(crypto OR bitcoin OR ethereum OR stablecoin OR solana OR web3) (trending OR "hot topic" OR viral OR breaking OR "just in")', ("crypto", "trending", "viral", "breaking", "news")),
     DiscoveryTopic("tokenized_stocks", '(("tokenized stocks" OR "tokenized stock" OR "tokenized equities" OR "onchain stocks" OR "on-chain stocks" OR "stock tokens") AND (crypto OR blockchain OR web3 OR RWA OR "real world assets"))', ("stock", "stocks", "equities", "tokenized", "onchain", "rwa", "crypto", "blockchain")),
+    DiscoveryTopic("payments_stablecoins", '((payments OR stablecoin OR USDC OR USDT OR "stable coins") AND (crypto OR web3 OR blockchain))', ("payments", "stablecoin", "usdc", "usdt", "crypto", "web3", "blockchain")),
 )
 
 SPAMMY_TERMS = ("referral", "ref link", "dm me for", "free followers", "casino")
@@ -115,8 +116,8 @@ def _score(post: Post, topic: DiscoveryTopic) -> int:
     return score
 
 
-def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts: int = 5) -> list[tuple[Post, str, int]]:
-    """Find the newest qualifying post from up to max_posts discovery topics."""
+def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts: int = 10) -> list[tuple[Post, str, int]]:
+    """Find up to max_posts recent qualifying posts from topic searches."""
     topics = list(DISCOVERY_TOPICS)
     random.shuffle(topics)
 
@@ -124,14 +125,11 @@ def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts:
     candidates: list[tuple[Post, str, int]] = []
 
     for topic in topics:
-        if len(candidates) >= max_posts:
-            break
         try:
             posts = provider.search_posts(topic.query, limit=20)
         except Exception:
             continue
 
-        topic_candidates: list[tuple[Post, str, int]] = []
         for post in posts:
             username = post.username.lstrip("@").lower()
             if not username or username in monitored or not _is_verified(post) or not post.text.strip():
@@ -141,11 +139,23 @@ def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts:
             score = _score(post, topic)
             if score < 5:
                 continue
-            topic_candidates.append((post, topic.name, score))
+            candidates.append((post, topic.name, score))
 
-        if topic_candidates:
-            newest = max(topic_candidates, key=lambda item: _created_at(item[0]))
-            candidates.append(newest)
+    candidates.sort(key=lambda item: (_created_at(item[0]), item[2]), reverse=True)
 
-    candidates.sort(key=lambda item: _created_at(item[0]), reverse=True)
-    return candidates[:max_posts]
+    selected: list[tuple[Post, str, int]] = []
+    used_authors: set[str] = set()
+    used_posts: set[str] = set()
+
+    for item in candidates:
+        post = item[0]
+        author = post.username.lstrip("@").lower()
+        if not author or author in used_authors or post.id in used_posts:
+            continue
+        selected.append(item)
+        used_authors.add(author)
+        used_posts.add(post.id)
+        if len(selected) >= max_posts:
+            break
+
+    return selected
