@@ -280,8 +280,22 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
     return _process_post(db, newest, handle, source="monitored account")
 
 
-def _run_discovery(db, provider, accounts: list[str], scan_start: datetime, now: datetime) -> tuple[int, bool]:
-    candidates = discover_posts(provider, accounts, max_posts=DISCOVERY_CANDIDATE_POOL_SIZE)
+def _run_discovery(
+    db,
+    provider,
+    accounts: list[str],
+    scan_start: datetime,
+    now: datetime,
+    max_posts: int,
+) -> tuple[int, bool]:
+    if max_posts <= 0:
+        return 0, False
+
+    candidates = discover_posts(
+        provider,
+        accounts,
+        max_posts=max(DISCOVERY_CANDIDATE_POOL_SIZE, max_posts),
+    )
     if not candidates:
         logger.info("Discovery found no qualifying non-monitored posts.")
         return 0, False
@@ -313,7 +327,7 @@ def _run_discovery(db, provider, accounts: list[str], scan_start: datetime, now:
             record_activity(db, "discovery_processed", handle, post.id, f"Discovered reply opportunity from topic {topic} with score {score}")
             used_authors.add(author)
             sent += 1
-            if sent >= MAX_DISCOVERY_POSTS_PER_RUN:
+            if sent >= max_posts:
                 break
     return sent, had_error
 
@@ -350,9 +364,17 @@ def run_monitor_cycle() -> None:
 
     logger.info("MONITORED COMPLETE | feeds=%d/%d", monitored_sent, MONITORED_HANDLES_PER_RUN)
 
-    discovery_sent, discovery_error = _run_discovery(db, provider, accounts, scan_start, now)
+    discovery_target = max(0, MONITORED_HANDLES_PER_RUN + MAX_DISCOVERY_POSTS_PER_RUN - monitored_sent)
+    discovery_sent, discovery_error = _run_discovery(
+        db,
+        provider,
+        accounts,
+        scan_start,
+        now,
+        discovery_target,
+    )
     had_error = had_error or discovery_error
-    logger.info("DISCOVERY COMPLETE | feeds=%d/%d", discovery_sent, MAX_DISCOVERY_POSTS_PER_RUN)
+    logger.info("DISCOVERY COMPLETE | feeds=%d/%d", discovery_sent, discovery_target)
 
     if had_error:
         logger.error("SCAN NOT CHECKPOINTED | one or more feed operations failed")
