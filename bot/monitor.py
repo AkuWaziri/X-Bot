@@ -364,7 +364,10 @@ def run_monitor_cycle() -> None:
 
     logger.info("MONITORED COMPLETE | feeds=%d/%d", monitored_sent, MONITORED_HANDLES_PER_RUN)
 
-    discovery_target = max(0, MONITORED_HANDLES_PER_RUN + MAX_DISCOVERY_POSTS_PER_RUN - monitored_sent)
+    # Discovery is an independent bucket. It scans the same previous-checkpoint
+    # → now window and may contribute up to 10 additional posts regardless of
+    # how many monitored-handle posts qualified.
+    discovery_target = MAX_DISCOVERY_POSTS_PER_RUN
     discovery_sent, discovery_error = _run_discovery(
         db,
         provider,
@@ -374,7 +377,7 @@ def run_monitor_cycle() -> None:
         discovery_target,
     )
     had_error = had_error or discovery_error
-    logger.info("DISCOVERY COMPLETE | feeds=%d/%d", discovery_sent, discovery_target)
+    logger.info("DISCOVERY COMPLETE | feeds=%d/%d", discovery_sent, MAX_DISCOVERY_POSTS_PER_RUN)
 
     if had_error:
         logger.error("SCAN NOT CHECKPOINTED | one or more feed operations failed")
