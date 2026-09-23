@@ -373,7 +373,7 @@ def test_last_scan_checkpoint_is_read_from_activity_log():
     assert _last_scan_checkpoint(db) == datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc)
 
 
-def test_discovery_fills_unmet_total_feed_target(monkeypatch):
+def test_discovery_keeps_independent_ten_post_target(monkeypatch):
     accounts = [f"@integration{i}" for i in range(20)]
     db = IntegrationDB()
     captured = []
@@ -393,7 +393,7 @@ def test_discovery_fills_unmet_total_feed_target(monkeypatch):
 
     run_monitor_cycle()
 
-    assert captured == [MONITORED_HANDLES_PER_RUN + 10]
+    assert captured == [10]
 
 
 def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypatch):
