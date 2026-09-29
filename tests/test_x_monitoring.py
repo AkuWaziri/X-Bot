@@ -168,7 +168,7 @@ def test_provider_finds_original_after_filtered_tweet():
         ]
     )
 
-    posts = provider.get_latest_posts("@alice", limit=1)
+    posts = provider.get_latest_posts("alice", limit=1)
     assert len(posts) == 1
     assert posts[0].id == "original"
 
@@ -182,7 +182,7 @@ def test_monitored_pool_randomizes_full_account_list():
     assert MONITORED_HANDLES_PER_RUN == 10
 
 
-def test_monitored_handles_rotate_between_schedules(monkeypatch):
+def test_monitored_handles_rotate_between_schedules():
     from bot.monitor import _select_rotating_handles
 
     accounts = [f"@user{i:02d}" for i in range(20)]
@@ -192,11 +192,26 @@ def test_monitored_handles_rotate_between_schedules(monkeypatch):
     second = _select_rotating_handles(db, accounts)
     third = _select_rotating_handles(db, accounts)
 
-    assert first == [f"@user{i:02d}" for i in range(10)]
-    assert second == [f"@user{i:02d}" for i in range(10, 20)]
-    assert third == first
+    assert len(first) == 10
+    assert len(second) == 10
+    assert len(third) == 10
     assert set(first).isdisjoint(second)
+    assert set(second).isdisjoint(third)
+    assert first == third
+    assert set(first + second) == set(accounts)
 
+
+def test_monitored_handles_are_not_alphabetical(monkeypatch):
+    from bot.monitor import _select_rotating_handles
+
+    accounts = [f"@user{i:02d}" for i in range(20)]
+    db = IntegrationDB()
+
+    monkeypatch.setattr("bot.monitor.random.shuffle", lambda values: values.reverse())
+
+    first = _select_rotating_handles(db, accounts)
+
+    assert first == [f"@user{i:02d}" for i in range(19, 9, -1)]
 
 
 def test_monitored_handle_selects_newest_qualifying_post_since_scan():
@@ -270,6 +285,7 @@ def test_twscrape_block_stops_cycle_without_checkpoint(monkeypatch):
 
     assert any(item[1] == "x_provider_blocked" for item in activity)
     assert not any(item[1] == "scan_checkpoint" for item in activity)
+
 
 def test_non_404_provider_failure_remains_hard_error(monkeypatch):
     activity = []
@@ -504,6 +520,7 @@ def test_manual_reply_selection_claim_is_single_use(monkeypatch):
     assert sum(1 for item in calls if isinstance(item, str) and item.startswith("✅ REPLY")) == 1
     assert "That reply has already been processed." in calls
 
+
 def test_auto_reply_uncertain_attempt_is_not_retried(monkeypatch):
     post = Post(
         id="auto-uncertain",
@@ -530,7 +547,7 @@ def test_auto_reply_uncertain_attempt_is_not_retried(monkeypatch):
     monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
     monkeypatch.setattr("bot.monitor.send_new_post", lambda *args, **kwargs: None)
 
-    result = _process_post( FakeDB(), post, "@alice", source="test", provider=Provider())
+    result = _process_post(FakeDB(), post, "@alice", source="test", provider=Provider())
 
     assert result == "skipped"
     assert create_calls == []
