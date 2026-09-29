@@ -29,6 +29,33 @@ def telegram_already_sent(db, post_id: str) -> bool:
     return bool(result.data)
 
 
+def _latest_auto_reply_state(db, post_id: str) -> tuple[str | None, str | None]:
+    """Return the latest durable auto-reply state and posted reply text, if known."""
+    result = (
+        db.table("activity_log")
+        .select("event_type,message")
+        .eq("post_id", post_id)
+        .in_("event_type", ["auto_reply_started", "auto_reply_posted", "auto_reply_error"])
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return None, None
+
+    row = result.data[0]
+    state = str(row.get("event_type") or "")
+    message = str(row.get("message") or "")
+    if state != "auto_reply_posted":
+        return state, None
+
+    prefix = "Automatic reply posted: "
+    if not message.startswith(prefix):
+        return state, None
+    text = message[len(prefix):].split(" | reply_id=", 1)[0].strip()
+    return state, text or None
+
+
 def _schedule_key(schedule_start: datetime) -> str:
     return schedule_start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
 
@@ -208,23 +235,50 @@ def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
 
     auto_reply_text = None
     if AUTO_REPLY:
-        try:
-            candidate_reply = random.choice(replies)
-            if provider is None:
-                raise RuntimeError("X provider is required for automatic replies")
-            result = provider.create_reply(candidate_reply, post.id)
-            auto_reply_text = candidate_reply
-            reply_id = str(result.get("tweet_id") or result.get("id") or "").strip()
+        state, posted_text = _latest_auto_reply_state(db, post.id)
+        if state == "auto_reply_posted":
+            # A previous run already posted successfully but may have crashed
+            # before Telegram was updated. Reuse the recorded text instead of
+            # creating a second X reply.
+            auto_reply_text = posted_text
+            logger.info("AUTO REPLY ALREADY POSTED | %s | reusing durable result", post.id)
+        elif state == "auto_reply_started":
+            # We cannot know whether the provider accepted the request before
+            # the process crashed. Do not risk a duplicate X post.
+            logger.warning("AUTO REPLY UNCERTAIN | %s | skipping retry to prevent duplicate posting", post.id)
             record_activity(
                 db,
-                "auto_reply_posted",
+                "auto_reply_recovery_blocked",
                 handle,
                 post.id,
-                f"Automatic reply posted: {auto_reply_text}" + (f" | reply_id={reply_id}" if reply_id else ""),
+                "Previous automatic reply attempt did not reach a durable success or error state",
             )
-        except Exception as exc:
-            logger.exception("Automatic reply failed for %s", post.id)
-            record_activity(db, "auto_reply_error", handle, post.id, str(exc)[:500])
+            return "skipped"
+        else:
+            try:
+                candidate_reply = random.choice(replies)
+                if provider is None:
+                    raise RuntimeError("X provider is required for automatic replies")
+                record_activity(
+                    db,
+                    "auto_reply_started",
+                    handle,
+                    post.id,
+                    f"Automatic reply attempt started: {candidate_reply}",
+                )
+                result = provider.create_reply(candidate_reply, post.id)
+                auto_reply_text = candidate_reply
+                reply_id = str(result.get("tweet_id") or result.get("id") or "").strip()
+                record_activity(
+                    db,
+                    "auto_reply_posted",
+                    handle,
+                    post.id,
+                    f"Automatic reply posted: {auto_reply_text}" + (f" | reply_id={reply_id}" if reply_id else ""),
+                )
+            except Exception as exc:
+                logger.exception("Automatic reply failed for %s", post.id)
+                record_activity(db, "auto_reply_error", handle, post.id, str(exc)[:500])
     else:
         save_pending_replies(db, post.id, handle, post.text, replies)
 
