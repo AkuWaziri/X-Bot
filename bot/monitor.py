@@ -395,9 +395,14 @@ def run_monitor_cycle() -> None:
     provider = get_x_provider()
     db = get_db()
     now = datetime.now(timezone.utc)
+    schedule_start = _schedule_start(now)
+    if _schedule_already_processed(db, schedule_start):
+        logger.info("SCHEDULE ALREADY PROCESSED | slot=%s", _schedule_key(schedule_start))
+        return
+
     previous_scan = _last_scan_checkpoint(db)
-    scan_start = previous_scan or _schedule_start(now)
-    logger.info("Scan range: %s → %s UTC", scan_start.isoformat(), now.isoformat())
+    scan_start = previous_scan or schedule_start
+    logger.info("Scan range: %s → %s UTC | slot=%s", scan_start.isoformat(), now.isoformat(), _schedule_key(schedule_start))
 
     had_error = False
     monitored_sent = 0
@@ -438,7 +443,8 @@ def run_monitor_cycle() -> None:
         return
 
     _mark_scan_checkpoint(db, now)
-    logger.info("SCAN COMPLETE | checkpoint=%s | total_feeds=%d", now.isoformat(), monitored_sent + discovery_sent)
+    _mark_schedule_processed(db, schedule_start)
+    logger.info("SCAN COMPLETE | checkpoint=%s | slot=%s | total_feeds=%d", now.isoformat(), _schedule_key(schedule_start), monitored_sent + discovery_sent)
 
 
 if __name__ == "__main__":
