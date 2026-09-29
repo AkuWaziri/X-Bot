@@ -63,20 +63,31 @@ def process_select(db, post_id: str, reply_number: int) -> None:
         send_message("That reply option is unavailable.")
         return
 
-    mark_reply_selected(db, post_id, reply_number)
-    record_activity(
-        db,
-        "reply_selected",
-        handle,
-        post_id,
-        f"Manual reply option {reply_number} selected: {suggested_reply}",
-    )
+    claimed = mark_reply_selected(db, post_id, reply_number)
+    if not claimed:
+        send_message("That reply has already been processed.")
+        return
 
-    send_message(
-        f"✅ REPLY {reply_number} SELECTED\n\n"
-        f"{suggested_reply}\n\n"
-        "Copy it and post it manually under the original X post."
-    )
+    try:
+        record_activity(
+            db,
+            "reply_selected",
+            handle,
+            post_id,
+            f"Manual reply option {reply_number} selected: {suggested_reply}",
+        )
+
+        send_message(
+            f"✅ REPLY {reply_number} SELECTED\n\n"
+            f"{suggested_reply}\n\n"
+            "Copy it and post it manually under the original X post."
+        )
+    except Exception:
+        # Return the claim to pending so a transient Telegram failure does not
+        # permanently strand the reply.
+        from bot.db import mark_reply_pending
+        mark_reply_pending(db, post_id)
+        raise
 
 
 def process_skip(db, post_id: str) -> None:
