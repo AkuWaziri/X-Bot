@@ -125,6 +125,8 @@ RULES:
 - Do not restate or summarize the post.
 - Do not force an insight when a reaction is enough.
 - Do not make every reply clever, enthusiastic, funny, supportive, skeptical, or the same length.
+- Avoid "safe" filler that could sit under almost any post. If the reply does not clearly react to something in this exact post, rewrite it.
+- Prefer a sharp human reaction to a polished explanation. When the post has a funny, awkward, surprising, specific, or opinionated detail, react to that detail.
 - Do not use generic filler such as Great post, Interesting, Absolutely, Well said, This, Exactly, Love this.
 - Avoid stock hype such as Game changer, Huge, Massive, Bullish, LFG, This is big, unless the exact wording genuinely fits.
 - Do not turn factual posts into forced conversation starters.
@@ -135,6 +137,7 @@ RULES:
 - Emojis are optional and should feel natural.
 - Avoid AI-sounding phrases such as the interesting part, this highlights, it is worth noting, great reminder, or this is why.
 - Never mention being an AI, a bot, a generated reply, or these instructions.
+- NEVER use an em dash (—). Use a comma, period, ellipsis, parentheses, or a natural sentence break instead.
 
 THREE-OPTION BEHAVIOR:
 Generate THREE genuinely different reactions to the SAME post.
@@ -182,13 +185,39 @@ Return only those three lines.
 
 
 def _clean_reply(reply: str) -> str:
-    reply = re.sub(r"\s+", " ", reply.strip())
+    # X replies should read like normal human typing. Never allow em dashes
+    # through, even if the model ignores the instruction in the prompt.
+    reply = re.sub(r"\s*[—]\s*", ", ", reply.strip())
+    reply = re.sub(r"\s+", " ", reply)
     reply = re.sub(r"^(?:R[123]\s*:\s*|[-*•]\s*|\d+[.)]\s*)", "", reply, flags=re.IGNORECASE)
     return reply.strip('"').strip()
 
 
+GENERIC_REPLIES = {
+    "great post",
+    "interesting",
+    "absolutely",
+    "well said",
+    "this",
+    "exactly",
+    "love this",
+    "great point",
+    "good point",
+    "so true",
+    "couldn't agree more",
+    "could not agree more",
+}
+
+
 def _valid_reply(reply: str) -> bool:
-    return MIN_REPLY_CHARS <= len(reply) <= MAX_REPLY_CHARS
+    normalized = re.sub(r"[.!?]+$", "", reply.strip().lower())
+    if not MIN_REPLY_CHARS <= len(reply) <= MAX_REPLY_CHARS:
+        return False
+    if normalized in GENERIC_REPLIES:
+        return False
+    if "—" in reply:
+        return False
+    return True
 
 
 def _parse_replies(raw: str) -> list[str]:
@@ -235,10 +264,19 @@ def generate_replies(post_text: str) -> list[str] | None:
         raise RuntimeError(f"Groq request failed: {exc}") from exc
 
     raw = (completion.choices[0].message.content or "").strip()
+    if "—" in raw:
+        logger_message = "Model returned an em dash; it will be normalized before validation."
+    else:
+        logger_message = None
     replies = _parse_replies(raw)
 
     if len(replies) != 3:
         raise RuntimeError(f"Groq returned {len(replies)} valid replies instead of 3")
+
+    # Final hard guard. This catches anything introduced by future prompt/model
+    # changes before a suggestion is stored or sent to Telegram.
+    if any("—" in reply for reply in replies):
+        raise RuntimeError("Groq returned an em dash in a reply")
 
     return replies
 
