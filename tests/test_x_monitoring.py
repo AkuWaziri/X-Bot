@@ -465,3 +465,69 @@ def test_manual_reply_selection_claim_is_single_use(monkeypatch):
     assert calls.count("claim") == 2
     assert sum(1 for item in calls if isinstance(item, str) and item.startswith("✅ REPLY")) == 1
     assert "That reply has already been processed." in calls
+
+def test_auto_reply_uncertain_attempt_is_not_retried(monkeypatch):
+    post = Post(
+        id="auto-uncertain",
+        text="test post",
+        username="alice",
+        created_at="Tue Sep 08 15:20:00 +0000 2026",
+        url="https://x.com/alice/status/auto-uncertain",
+    )
+    activity = []
+    create_calls = []
+
+    class Provider:
+        def create_reply(self, text, post_id):
+            create_calls.append((text, post_id))
+            return {"tweet_id": "new-reply"}
+
+    monkeypatch.setattr("bot.monitor.AUTO_REPLY", True)
+    monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.save_post", lambda db, value: None)
+    monkeypatch.setattr("bot.monitor.generate_replies", lambda text: ["good reply one", "good reply two", "good reply three"])
+    monkeypatch.setattr("bot.monitor.validate_replies", lambda replies: True)
+    monkeypatch.setattr("bot.monitor._latest_auto_reply_state", lambda db, post_id: ("auto_reply_started", None))
+    monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
+    monkeypatch.setattr("bot.monitor.send_new_post", lambda *args, **kwargs: None)
+
+    result = _process_post( FakeDB(), post, "@alice", source="test", provider=Provider())
+
+    assert result == "skipped"
+    assert create_calls == []
+    assert any(item[1] == "auto_reply_recovery_blocked" for item in activity)
+
+
+def test_auto_reply_posted_state_is_reused_without_duplicate_post(monkeypatch):
+    post = Post(
+        id="auto-posted",
+        text="test post",
+        username="alice",
+        created_at="Tue Sep 08 15:20:00 +0000 2026",
+        url="https://x.com/alice/status/auto-posted",
+    )
+    sent = []
+    create_calls = []
+
+    class Provider:
+        def create_reply(self, text, post_id):
+            create_calls.append((text, post_id))
+            return {"tweet_id": "duplicate"}
+
+    monkeypatch.setattr("bot.monitor.AUTO_REPLY", True)
+    monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.save_post", lambda db, value: None)
+    monkeypatch.setattr("bot.monitor.generate_replies", lambda text: ["good reply one", "good reply two", "good reply three"])
+    monkeypatch.setattr("bot.monitor.validate_replies", lambda replies: True)
+    monkeypatch.setattr("bot.monitor._latest_auto_reply_state", lambda db, post_id: ("auto_reply_posted", "already posted reply"))
+    monkeypatch.setattr("bot.monitor.record_activity", lambda *args: None)
+    monkeypatch.setattr("bot.monitor.send_new_post", lambda *args, **kwargs: sent.append(kwargs))
+
+    result = _process_post(FakeDB(), post, "@alice", source="test", provider=Provider())
+
+    assert result == "sent"
+    assert create_calls == []
+    assert sent[0]["auto_reply_text"] == "already posted reply"
+    assert sent[0]["suggested_replies"] is None
