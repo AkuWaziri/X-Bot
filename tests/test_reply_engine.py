@@ -17,7 +17,7 @@ class ReplyEngineTests(unittest.TestCase):
     def test_clean_reply_removes_tag_and_em_dash(self):
         self.assertEqual(
             _clean_reply("R1: shipping fast — users can see the progress"),
-            "shipping fast , users can see the progress",
+            "shipping fast, users can see the progress",
         )
 
     def test_parse_requires_three_valid_distinct_replies(self):
