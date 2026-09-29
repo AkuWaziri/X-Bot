@@ -301,7 +301,7 @@ def test_groq_incomplete_reply_set_retries_and_recovers(monkeypatch):
         calls.append(text)
         if len(calls) == 1:
             raise RuntimeError("Groq returned 2 valid replies instead of 3")
-        return ["this is good", "wait really?", "lol that is wild"]
+        return ["this rollout actually looks useful", "wait the wallet flow works already?", "lol that timing is wild honestly"]
 
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
