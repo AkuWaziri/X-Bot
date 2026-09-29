@@ -69,12 +69,19 @@ def get_pending_reply(db: Client, post_id: str) -> dict | None:
     return result.data[0] if result.data else None
 
 
-def mark_reply_selected(db: Client, post_id: str, reply_number: int) -> None:
+def mark_reply_selected(db: Client, post_id: str, reply_number: int) -> bool:
+    """Atomically claim a pending reply option for manual posting."""
     if reply_number not in (1, 2, 3):
         raise ValueError("Reply number must be 1, 2, or 3")
-    db.table("pending_replies").update(
-        {"selected_reply": reply_number, "status": "selected"}
-    ).eq("post_id", post_id).eq("status", "pending").execute()
+    result = (
+        db.table("pending_replies")
+        .update({"selected_reply": reply_number, "status": "selected"})
+        .eq("post_id", post_id)
+        .eq("status", "pending")
+        .select("post_id")
+        .execute()
+    )
+    return bool(result.data)
 
 
 def mark_reply_posted(db: Client, post_id: str, reply_id: str | None = None, reply_url: str | None = None) -> None:
