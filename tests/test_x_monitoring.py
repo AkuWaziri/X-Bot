@@ -9,6 +9,8 @@ from bot.monitor import (
     _is_recent_for_schedule,
     _last_scan_checkpoint,
     _parse_created_at,
+    _schedule_already_processed,
+    _schedule_start,
     _process_handle,
     _process_post,
     _select_handles,
@@ -371,6 +373,42 @@ def test_last_scan_checkpoint_is_read_from_activity_log():
     )
 
     assert _last_scan_checkpoint(db) == datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc)
+
+
+def test_schedule_marker_prevents_duplicate_cycle(monkeypatch):
+    from bot.monitor import _mark_schedule_processed
+
+    db = IntegrationDB()
+    now = datetime(2026, 9, 8, 14, 5, tzinfo=timezone.utc)
+    slot = _schedule_start(now)
+
+    assert not _schedule_already_processed(db, slot)
+    _mark_schedule_processed(db, slot)
+    assert _schedule_already_processed(db, slot)
+
+
+def test_schedule_marker_is_written_only_after_successful_cycle(monkeypatch):
+    accounts = ["@alice"]
+    db = IntegrationDB()
+
+    monkeypatch.setenv("TEST_MODE", "true")
+    monkeypatch.setenv("TEST_WINDOW_MINUTES", "10")
+    monkeypatch.setattr("bot.monitor.load_accounts", lambda: accounts)
+    monkeypatch.setattr("bot.monitor.get_x_provider", lambda: object())
+    monkeypatch.setattr("bot.monitor.get_db", lambda: db)
+    monkeypatch.setattr("bot.monitor._process_handle", lambda *args: "error")
+    monkeypatch.setattr("bot.monitor._run_discovery", lambda *args: (0, False))
+    monkeypatch.setattr(
+        "bot.monitor.record_activity",
+        lambda db, event_type, handle, post_id, message: db.activities.append(
+            {"event_type": event_type, "handle": handle, "post_id": post_id, "message": message}
+        ),
+    )
+
+    run_monitor_cycle()
+
+    assert not any(item["event_type"] == "schedule_processed" for item in db.activities)
+    assert not any(item["event_type"] == "scan_checkpoint" for item in db.activities)
 
 
 def test_discovery_keeps_independent_ten_post_target(monkeypatch):
