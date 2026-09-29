@@ -433,3 +433,35 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     assert len(saved_replies) == len(telegram_posts)
     assert any(item["event_type"] == "scan_checkpoint" for item in db.activities)
     assert not any(item["event_type"] == "error" for item in db.activities)
+
+
+def test_manual_reply_selection_claim_is_single_use(monkeypatch):
+    from bot import telegram_commands as commands
+
+    calls = []
+
+    class FakePendingDB:
+        pass
+
+    monkeypatch.setattr(
+        commands,
+        "get_pending_reply",
+        lambda db, post_id: {
+            "reply_1": "a useful reply with enough characters",
+            "handle": "@alice",
+        },
+    )
+    monkeypatch.setattr(
+        commands,
+        "mark_reply_selected",
+        lambda db, post_id, reply_number: calls.append("claim") or len(calls) == 1,
+    )
+    monkeypatch.setattr(commands, "record_activity", lambda *args: None)
+    monkeypatch.setattr(commands, "send_message", lambda message: calls.append(message))
+
+    commands.process_select(FakePendingDB(), "post-1", 1)
+    commands.process_select(FakePendingDB(), "post-1", 1)
+
+    assert calls.count("claim") == 2
+    assert sum(1 for item in calls if isinstance(item, str) and item.startswith("✅ REPLY")) == 1
+    assert "That reply has already been processed." in calls
