@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 MONITORED_HANDLES_PER_RUN = 10
 MAX_DISCOVERY_POSTS_PER_RUN = 10
 DISCOVERY_CANDIDATE_POOL_SIZE = 30
-SCHEDULE_TIMES_UTC = ((11, 0), (14, 0), (19, 0))
+SCHEDULE_TIMES_UTC = ((6, 0), (11, 0), (16, 0), (21, 0))
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 SCAN_CHECKPOINT_EVENT = "scan_checkpoint"
 HANDLE_ROTATION_EVENT = "handle_rotation"
@@ -98,7 +98,7 @@ def _schedule_start(now: datetime) -> datetime:
         return now - timedelta(minutes=minutes)
 
     configured = os.getenv("SCHEDULE_SLOT", "").strip()
-    configured_times = {"11": (11, 0), "14": (14, 0), "19": (19, 0)}
+    configured_times = {"6": (6, 0), "11": (11, 0), "16": (16, 0), "21": (21, 0)}
     if configured in configured_times:
         hour, minute = configured_times[configured]
     else:
@@ -141,7 +141,7 @@ def _select_handles(accounts: list[str]) -> list[str]:
     return candidates
 
 
-def _last_handle_rotation_cursor(db) -> int:
+def _last_handle_rotation_state(db) -> tuple[int, list[str] | None]:
     result = (
         db.table("activity_log")
         .select("message")
@@ -151,25 +151,46 @@ def _last_handle_rotation_cursor(db) -> int:
         .execute()
     )
     if not result.data:
-        return 0
+        return 0, None
 
     message = str(result.data[0].get("message") or "")
-    if not message.startswith("cursor="):
-        return 0
-
-    try:
-        return max(0, int(message.split("|", 1)[0][7:]))
-    except (TypeError, ValueError):
-        return 0
+    parts = message.split("|")
+    cursor = 0
+    order = None
+    if parts and parts[0].startswith("cursor="):
+        try:
+            cursor = max(0, int(parts[0][7:]))
+        except (TypeError, ValueError):
+            cursor = 0
+    for part in parts[1:]:
+        if part.startswith("order="):
+            values = [item.strip() for item in part[6:].split(",") if item.strip()]
+            order = values or None
+            break
+    return cursor, order
 
 
 def _select_rotating_handles(db, accounts: list[str]) -> list[str]:
-    """Select the next rotating batch of monitored handles and persist the next cursor."""
-    ordered = sorted(dict.fromkeys(accounts), key=str.lower)
-    if not ordered:
+    """Select the next rotating batch using a persisted randomized account order."""
+    unique_accounts = list(dict.fromkeys(accounts))
+    if not unique_accounts:
         return []
 
-    cursor = _last_handle_rotation_cursor(db) % len(ordered)
+    cursor, saved_order = _last_handle_rotation_state(db)
+    account_set = set(unique_accounts)
+
+    if saved_order:
+        # Preserve the existing random rotation while adding newly configured
+        # accounts into the pool without reverting to alphabetical ordering.
+        ordered = [handle for handle in saved_order if handle in account_set]
+        new_accounts = [handle for handle in unique_accounts if handle not in set(ordered)]
+        random.shuffle(new_accounts)
+        ordered.extend(new_accounts)
+    else:
+        ordered = list(unique_accounts)
+        random.shuffle(ordered)
+
+    cursor %= len(ordered)
     count = min(MONITORED_HANDLES_PER_RUN, len(ordered))
     selected = [ordered[(cursor + offset) % len(ordered)] for offset in range(count)]
     next_cursor = (cursor + count) % len(ordered)
@@ -179,7 +200,7 @@ def _select_rotating_handles(db, accounts: list[str]) -> list[str]:
         HANDLE_ROTATION_EVENT,
         "SYSTEM",
         None,
-        f"cursor={next_cursor}|selected={','.join(selected)}",
+        f"cursor={next_cursor}|selected={','.join(selected)}|order={','.join(ordered)}",
     )
     logger.info(
         "ROTATING HANDLE POOL | start=%d | selected=%d/%d | next=%d | handles=%s",
@@ -237,45 +258,22 @@ def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
     if AUTO_REPLY:
         state, posted_text = _latest_auto_reply_state(db, post.id)
         if state == "auto_reply_posted":
-            # A previous run already posted successfully but may have crashed
-            # before Telegram was updated. Reuse the recorded text instead of
-            # creating a second X reply.
             auto_reply_text = posted_text
             logger.info("AUTO REPLY ALREADY POSTED | %s | reusing durable result", post.id)
         elif state == "auto_reply_started":
-            # We cannot know whether the provider accepted the request before
-            # the process crashed. Do not risk a duplicate X post.
             logger.warning("AUTO REPLY UNCERTAIN | %s | skipping retry to prevent duplicate posting", post.id)
-            record_activity(
-                db,
-                "auto_reply_recovery_blocked",
-                handle,
-                post.id,
-                "Previous automatic reply attempt did not reach a durable success or error state",
-            )
+            record_activity(db, "auto_reply_recovery_blocked", handle, post.id, "Previous automatic reply attempt did not reach a durable success or error state")
             return "skipped"
         else:
             try:
                 candidate_reply = random.choice(replies)
                 if provider is None:
                     raise RuntimeError("X provider is required for automatic replies")
-                record_activity(
-                    db,
-                    "auto_reply_started",
-                    handle,
-                    post.id,
-                    f"Automatic reply attempt started: {candidate_reply}",
-                )
+                record_activity(db, "auto_reply_started", handle, post.id, f"Automatic reply attempt started: {candidate_reply}")
                 result = provider.create_reply(candidate_reply, post.id)
                 auto_reply_text = candidate_reply
                 reply_id = str(result.get("tweet_id") or result.get("id") or "").strip()
-                record_activity(
-                    db,
-                    "auto_reply_posted",
-                    handle,
-                    post.id,
-                    f"Automatic reply posted: {auto_reply_text}" + (f" | reply_id={reply_id}" if reply_id else ""),
-                )
+                record_activity(db, "auto_reply_posted", handle, post.id, f"Automatic reply posted: {auto_reply_text}" + (f" | reply_id={reply_id}" if reply_id else ""))
             except Exception as exc:
                 logger.exception("Automatic reply failed for %s", post.id)
                 record_activity(db, "auto_reply_error", handle, post.id, str(exc)[:500])
@@ -423,18 +421,8 @@ def run_monitor_cycle() -> None:
 
     logger.info("MONITORED COMPLETE | feeds=%d/%d", monitored_sent, MONITORED_HANDLES_PER_RUN)
 
-    # Discovery is an independent bucket. It scans the same previous-checkpoint
-    # → now window and may contribute up to 10 additional posts regardless of
-    # how many monitored-handle posts qualified.
     discovery_target = MAX_DISCOVERY_POSTS_PER_RUN
-    discovery_sent, discovery_error = _run_discovery(
-        db,
-        provider,
-        accounts,
-        scan_start,
-        now,
-        discovery_target,
-    )
+    discovery_sent, discovery_error = _run_discovery(db, provider, accounts, scan_start, now, discovery_target)
     had_error = had_error or discovery_error
     logger.info("DISCOVERY COMPLETE | feeds=%d/%d", discovery_sent, MAX_DISCOVERY_POSTS_PER_RUN)
 
