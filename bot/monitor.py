@@ -14,9 +14,9 @@ from bot.x.twscrape import TwscrapeBlockedError
 
 logger = logging.getLogger(__name__)
 
-# Production feed allocation per scheduled run: 10 monitored handles + 10 discovery posts.
+# Production feed allocation per scheduled run: 10 monitored handles + 5 verified discovery posts.
 MONITORED_HANDLES_PER_RUN = 10
-MAX_DISCOVERY_POSTS_PER_RUN = 10
+MAX_DISCOVERY_POSTS_PER_RUN = 5
 DISCOVERY_CANDIDATE_POOL_SIZE = 30
 SCHEDULE_TIMES_UTC = ((6, 0), (11, 0), (16, 0), (21, 0))
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
@@ -141,7 +141,7 @@ def _select_handles(accounts: list[str]) -> list[str]:
     return candidates
 
 
-def _last_handle_rotation_state(db) -> tuple[int, list[str] | None]:
+def _last_handle_rotation_state(db) -> list[str] | None:
     result = (
         db.table("activity_log")
         .select("message")
@@ -151,67 +151,49 @@ def _last_handle_rotation_state(db) -> tuple[int, list[str] | None]:
         .execute()
     )
     if not result.data:
-        return 0, None
+        return None
 
     message = str(result.data[0].get("message") or "")
-    parts = message.split("|")
-    cursor = 0
-    order = None
-    if parts and parts[0].startswith("cursor="):
-        try:
-            cursor = max(0, int(parts[0][7:]))
-        except (TypeError, ValueError):
-            cursor = 0
-    for part in parts[1:]:
-        if part.startswith("order="):
-            values = [item.strip() for item in part[6:].split(",") if item.strip()]
-            order = values or None
-            break
-    return cursor, order
+    for part in message.split("|"):
+        if part.startswith("selected="):
+            values = [item.strip() for item in part[9:].split(",") if item.strip()]
+            return values or None
+    return None
 
 
 def _select_rotating_handles(db, accounts: list[str]) -> list[str]:
-    """Select the next rotating batch using a persisted randomized account order."""
+    """Randomly select the next monitored batch, avoiding the previous batch when possible."""
     unique_accounts = list(dict.fromkeys(accounts))
     if not unique_accounts:
         return []
 
-    cursor, saved_order = _last_handle_rotation_state(db)
-    account_set = set(unique_accounts)
+    previous = _last_handle_rotation_state(db) or []
+    previous_set = {handle.lower() for handle in previous}
 
-    if saved_order:
-        # Preserve the existing random rotation while adding newly configured
-        # accounts into the pool without reverting to alphabetical ordering.
-        ordered = [handle for handle in saved_order if handle in account_set]
-        new_accounts = [handle for handle in unique_accounts if handle not in set(ordered)]
-        random.shuffle(new_accounts)
-        ordered.extend(new_accounts)
+    fresh_pool = [handle for handle in unique_accounts if handle.lower() not in previous_set]
+    if len(fresh_pool) >= MONITORED_HANDLES_PER_RUN:
+        selected = random.sample(fresh_pool, MONITORED_HANDLES_PER_RUN)
     else:
-        ordered = list(unique_accounts)
-        random.shuffle(ordered)
+        selected = list(fresh_pool)
+        remaining = [handle for handle in unique_accounts if handle not in selected]
+        needed = min(MONITORED_HANDLES_PER_RUN - len(selected), len(remaining))
+        selected.extend(random.sample(remaining, needed))
 
-    cursor %= len(ordered)
-    count = min(MONITORED_HANDLES_PER_RUN, len(ordered))
-    selected = [ordered[(cursor + offset) % len(ordered)] for offset in range(count)]
-    next_cursor = (cursor + count) % len(ordered)
-
+    random.shuffle(selected)
     record_activity(
         db,
         HANDLE_ROTATION_EVENT,
         "SYSTEM",
         None,
-        f"cursor={next_cursor}|selected={','.join(selected)}|order={','.join(ordered)}",
+        f"selected={','.join(selected)}",
     )
     logger.info(
-        "ROTATING HANDLE POOL | start=%d | selected=%d/%d | next=%d | handles=%s",
-        cursor,
+        "RANDOMIZED HANDLE POOL | selected=%d/%d | handles=%s",
         len(selected),
-        len(ordered),
-        next_cursor,
+        min(MONITORED_HANDLES_PER_RUN, len(unique_accounts)),
         ", ".join(selected),
     )
     return selected
-
 
 def _is_missing_account_error(exc: Exception) -> bool:
     """Return True only for a provider 404 that means the monitored account cannot be resolved."""
