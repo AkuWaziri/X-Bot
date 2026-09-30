@@ -182,7 +182,7 @@ def test_monitored_pool_randomizes_full_account_list():
     assert MONITORED_HANDLES_PER_RUN == 10
 
 
-def test_monitored_handles_rotate_between_schedules():
+def test_monitored_handles_randomly_change_between_schedules():
     from bot.monitor import _select_rotating_handles
 
     accounts = [f"@user{i:02d}" for i in range(20)]
@@ -197,21 +197,27 @@ def test_monitored_handles_rotate_between_schedules():
     assert len(third) == 10
     assert set(first).isdisjoint(second)
     assert set(second).isdisjoint(third)
-    assert first == third
     assert set(first + second) == set(accounts)
 
 
-def test_monitored_handles_are_not_alphabetical(monkeypatch):
+def test_monitored_handle_selection_uses_random_sample(monkeypatch):
     from bot.monitor import _select_rotating_handles
 
     accounts = [f"@user{i:02d}" for i in range(20)]
     db = IntegrationDB()
+    calls = []
 
-    monkeypatch.setattr("bot.monitor.random.shuffle", lambda values: values.reverse())
+    def fake_sample(pool, count):
+        calls.append((list(pool), count))
+        return list(pool)[:count]
 
-    first = _select_rotating_handles(db, accounts)
+    monkeypatch.setattr("bot.monitor.random.sample", fake_sample)
 
-    assert first == [f"@user{i:02d}" for i in range(19, 9, -1)]
+    selected = _select_rotating_handles(db, accounts)
+
+    assert len(selected) == 10
+    assert calls
+    assert calls[0][1] == 10
 
 
 def test_monitored_handle_selects_newest_qualifying_post_since_scan():
@@ -427,7 +433,7 @@ def test_schedule_marker_is_written_only_after_successful_cycle(monkeypatch):
     assert not any(item["event_type"] == "scan_checkpoint" for item in db.activities)
 
 
-def test_discovery_keeps_independent_ten_post_target(monkeypatch):
+def test_discovery_uses_five_post_target(monkeypatch):
     accounts = [f"@integration{i}" for i in range(20)]
     db = IntegrationDB()
     captured = []
@@ -447,7 +453,7 @@ def test_discovery_keeps_independent_ten_post_target(monkeypatch):
 
     run_monitor_cycle()
 
-    assert captured == [10]
+    assert captured == [5]
 
 
 def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypatch):
@@ -482,8 +488,8 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     discovery_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-discovery-")]
 
     assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN
-    assert len(discovery_posts) == 10
-    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + 10
+    assert len(discovery_posts) == 5
+    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + 5
     assert len(saved_replies) == len(telegram_posts)
     assert any(item["event_type"] == "scan_checkpoint" for item in db.activities)
     assert not any(item["event_type"] == "error" for item in db.activities)
