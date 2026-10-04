@@ -14,8 +14,8 @@ from bot.x.twscrape import TwscrapeBlockedError
 
 logger = logging.getLogger(__name__)
 
-# Production feed allocation per scheduled run: 17 monitored handles + 5 verified topic-discovery posts.
-MONITORED_HANDLES_PER_RUN = 17
+# Production feed allocation per scheduled run: 20 monitored handles + 5 verified topic-discovery posts.
+MONITORED_HANDLES_PER_RUN = 20
 MAX_DISCOVERY_POSTS_PER_RUN = 5
 DISCOVERY_CANDIDATE_POOL_SIZE = 30
 SCHEDULE_TIMES_UTC = ((6, 0), (11, 0), (16, 0), (21, 0))
