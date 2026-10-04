@@ -179,25 +179,26 @@ def test_monitored_pool_randomizes_full_account_list():
 
     assert len(selected) == 20
     assert set(selected) == set(accounts)
-    assert MONITORED_HANDLES_PER_RUN == 17
+    assert MONITORED_HANDLES_PER_RUN == 20
 
 
 def test_monitored_handles_randomly_change_between_schedules():
     from bot.monitor import _select_rotating_handles
 
-    accounts = [f"@user{i:02d}" for i in range(20)]
+    accounts = [f"@user{i:02d}" for i in range(60)]
     db = IntegrationDB()
 
     first = _select_rotating_handles(db, accounts)
     second = _select_rotating_handles(db, accounts)
     third = _select_rotating_handles(db, accounts)
 
-    assert len(first) == 17
-    assert len(second) == 17
-    assert len(third) == 17
-    assert set(first) != set(second)
-    assert set(second) != set(third)
-    assert set(first + second) == set(accounts)
+    assert len(first) == 20
+    assert len(second) == 20
+    assert len(third) == 20
+    assert set(first).isdisjoint(second)
+    assert set(second).isdisjoint(third)
+    assert set(first).isdisjoint(third)
+    assert len(set(first + second + third)) == 60
 
 
 def test_monitored_handle_selection_uses_random_sample(monkeypatch):
@@ -215,9 +216,9 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
 
     selected = _select_rotating_handles(db, accounts)
 
-    assert len(selected) == 17
+    assert len(selected) == 20
     assert calls
-    assert calls[0][1] == 17
+    assert calls[0][1] == 20
 
 
 def test_monitored_handle_selects_newest_qualifying_post_since_scan():
