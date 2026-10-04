@@ -179,7 +179,7 @@ def test_monitored_pool_randomizes_full_account_list():
 
     assert len(selected) == 20
     assert set(selected) == set(accounts)
-    assert MONITORED_HANDLES_PER_RUN == 10
+    assert MONITORED_HANDLES_PER_RUN == 17
 
 
 def test_monitored_handles_randomly_change_between_schedules():
@@ -192,9 +192,9 @@ def test_monitored_handles_randomly_change_between_schedules():
     second = _select_rotating_handles(db, accounts)
     third = _select_rotating_handles(db, accounts)
 
-    assert len(first) == 10
-    assert len(second) == 10
-    assert len(third) == 10
+    assert len(first) == 17
+    assert len(second) == 17
+    assert len(third) == 17
     assert set(first).isdisjoint(second)
     assert set(second).isdisjoint(third)
     assert set(first + second) == set(accounts)
@@ -215,9 +215,9 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
 
     selected = _select_rotating_handles(db, accounts)
 
-    assert len(selected) == 10
+    assert len(selected) == 17
     assert calls
-    assert calls[0][1] == 10
+    assert calls[0][1] == 17
 
 
 def test_monitored_handle_selects_newest_qualifying_post_since_scan():
