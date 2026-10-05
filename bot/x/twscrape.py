@@ -156,7 +156,7 @@ class TwscrapeProvider(XProvider):
         from twscrape.api import GQL_FEATURES
         from twscrape.xclid import XClIdGen
 
-        query_id = "7TKRKCPuAGsmYde0CudbVg"
+        query_id = "H-t2v_HvFR07ZBP9aOeKoA"
         payload = {
             "variables": {
                 "tweet_text": text,
@@ -170,6 +170,8 @@ class TwscrapeProvider(XProvider):
                     "possibly_sensitive": False,
                 },
                 "semantic_annotation_ids": [],
+                "disallowed_reply_options": None,
+                "semantic_annotation_options": {"source": "Unknown"},
             },
             "features": GQL_FEATURES,
             "queryId": query_id,
