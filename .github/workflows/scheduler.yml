@@ -3,9 +3,8 @@ name: X-Bot Scheduler
 on:
   workflow_dispatch:
   schedule:
-    # Run daily at 12 PM, 5 PM, and 10 PM WAT (UTC+1).
-    # GitHub Actions cron is UTC. Offset from :00 to reduce scheduler contention.
-    - cron: "17 11,16,21 * * *"
+    # Run daily at 12 PM, 5 PM, and 9 PM WAT (UTC+1).
+    - cron: "0 11,16,20 * * *"
 
 concurrency:
   group: x-bot-scheduler
