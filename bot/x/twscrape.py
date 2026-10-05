@@ -31,7 +31,7 @@ class TwscrapeProvider(XProvider):
 
     async def _preflight(self, handle: str) -> None:
         """Check X directly before twscrape can lock the only account and wait."""
-        import httpx
+        from curl_cffi import requests as curl_requests
 
         username = handle.lstrip("@").strip()
         headers = {
@@ -39,7 +39,7 @@ class TwscrapeProvider(XProvider):
             "Cookie": self._cookies(),
         }
         with curl_requests.Session(impersonate="chrome") as client:
-            response = await client.get(
+            response = client.get(
                 f"https://x.com/{username}",
                 headers=headers,
                 timeout=self.REQUEST_TIMEOUT_SECONDS,
@@ -197,7 +197,7 @@ class TwscrapeProvider(XProvider):
             "Cookie": self._cookies(),
         }
 
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+        with curl_requests.Session(impersonate="chrome") as client:
             response = client.post(
                 f"https://x.com/i/api/graphql/{query_id}/CreateTweet",
                 headers=headers,
