@@ -2,6 +2,11 @@ name: X-Bot
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+    - cron: "0 11 * * *"
+    - cron: "0 16 * * *"
+    - cron: "0 21 * * *"
 
 concurrency:
   group: x-bot-monitor
@@ -60,6 +65,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          X_PROVIDER_MODE: "fxtwitter"
           AUTO_REPLY: "false"
           SCHEDULE_SLOT: ""
         run: python -m bot.monitor
