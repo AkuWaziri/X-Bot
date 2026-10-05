@@ -38,7 +38,7 @@ class TwscrapeProvider(XProvider):
             "User-Agent": "Mozilla/5.0",
             "Cookie": self._cookies(),
         }
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+        with curl_requests.Session(impersonate="chrome") as client:
             response = await client.get(
                 f"https://x.com/{username}",
                 headers=headers,
@@ -151,7 +151,7 @@ class TwscrapeProvider(XProvider):
             raise RuntimeError(f"Twscrape provider failed: {exc}") from exc
 
     async def _create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
-        import httpx
+        from curl_cffi import requests as curl_requests
         from twscrape.account import TOKEN
         from twscrape.api import GQL_FEATURES
         from twscrape.xclid import XClIdGen
@@ -186,17 +186,19 @@ class TwscrapeProvider(XProvider):
             ),
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
             "X-CSRF-Token": TWITTERAPIS_CT0,
             "X-Twitter-Auth-Type": "OAuth2Session",
             "X-Twitter-Active-User": "yes",
+            "X-Twitter-Client-Language": "en",
             "Origin": "https://x.com",
-            "Referer": "https://x.com/compose/post",
-            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://x.com/home",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
             "Cookie": self._cookies(),
         }
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.post(
+            response = client.post(
                 f"https://x.com/i/api/graphql/{query_id}/CreateTweet",
                 headers=headers,
                 json=payload,
