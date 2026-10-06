@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   schedule:
     # Run daily at 12 PM, 5 PM, and 9 PM WAT (UTC+1).
-    - cron: "0 11,16,20 * * *"
+    # Offset by 5 minutes to reduce GitHub Actions scheduler contention.
+    - cron: "5 11,16,20 * * *"
 
 concurrency:
   group: x-bot-scheduler
