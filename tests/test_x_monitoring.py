@@ -311,21 +311,19 @@ def test_non_404_provider_failure_remains_hard_error(monkeypatch):
     assert activity[0][1] == "error"
 
 
-def test_groq_incomplete_reply_set_retries_and_recovers(monkeypatch):
+def test_groq_incomplete_reply_set_uses_local_fallback(monkeypatch):
     post = Post(
-        id="groq-retry",
+        id="groq-fallback",
         text="test post",
         username="alice",
         created_at="Tue Sep 08 15:20:00 +0000 2026",
-        url="https://x.com/alice/status/groq-retry",
+        url="https://x.com/alice/status/groq-fallback",
     )
     calls = []
 
     def fake_generate_replies(text):
         calls.append(text)
-        if len(calls) == 1:
-            raise RuntimeError("Groq returned 2 valid replies instead of 3")
-        return ["this rollout actually looks useful", "wait the wallet flow works already?", "lol that timing is wild honestly"]
+        raise RuntimeError("Groq returned 2 valid replies instead of 3")
 
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
@@ -338,33 +336,35 @@ def test_groq_incomplete_reply_set_retries_and_recovers(monkeypatch):
     result = _process_post(FakeDB(), post, "@alice", source="test")
 
     assert result == "sent"
-    assert len(calls) == 2
+    assert len(calls) == 1
 
 
-def test_groq_incomplete_reply_set_is_soft_skipped_after_retry(monkeypatch):
+def test_groq_rate_limit_does_not_block_feed_delivery(monkeypatch):
     post = Post(
-        id="groq-skip",
+        id="groq-rate-limit",
         text="test post",
         username="alice",
         created_at="Tue Sep 08 15:20:00 +0000 2026",
-        url="https://x.com/alice/status/groq-skip",
+        url="https://x.com/alice/status/groq-rate-limit",
     )
     calls = []
 
     def fake_generate_replies(text):
         calls.append(text)
-        raise RuntimeError("Groq returned 2 valid replies instead of 3")
+        raise RuntimeError("Groq request failed: 429 Rate limit exceeded")
 
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.save_post", lambda db, value: None)
     monkeypatch.setattr("bot.monitor.record_activity", lambda *args: None)
+    monkeypatch.setattr("bot.monitor.send_new_post", lambda *args, **kwargs: None)
     monkeypatch.setattr("bot.monitor.generate_replies", fake_generate_replies)
+    monkeypatch.setattr("bot.monitor.save_pending_replies", lambda *args: None)
 
     result = _process_post(FakeDB(), post, "@alice", source="test")
 
-    assert result == "skipped"
-    assert len(calls) == 2
+    assert result == "sent"
+    assert len(calls) == 1
 
 
 def test_discovery_topic_pool_covers_requested_categories():
