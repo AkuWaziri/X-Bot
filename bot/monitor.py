@@ -1,7 +1,6 @@
 import logging
 import os
 import random
-import re
 from datetime import datetime, timedelta, timezone
 
 from bot.accounts import load_accounts
@@ -201,37 +200,6 @@ def _is_missing_account_error(exc: Exception) -> bool:
     return "TwitterAPIs HTTP 404:" in str(exc)
 
 
-def _fallback_replies(post_text: str) -> list[str]:
-    """Create three local reply suggestions so feed delivery never depends on Groq availability."""
-    cleaned = re.sub(r"https?://\S+", "", post_text or "")
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    words = re.findall(r"[A-Za-z0-9$#@']+", cleaned)
-    hook = " ".join(words[:5]).strip()
-    if len(hook) > 28:
-        hook = hook[:28].rsplit(" ", 1)[0].strip()
-
-    if hook:
-        candidates = [
-            f"the {hook} part caught my eye",
-            f"ngl, the {hook} angle is worth watching",
-            f"curious to see where the {hook} story goes",
-        ]
-    else:
-        candidates = [
-            "that detail is what caught my eye here",
-            "ngl, this is worth keeping on the radar",
-            "curious to see what happens next here",
-        ]
-
-    if validate_replies(candidates):
-        return candidates
-    return [
-        "that detail is what caught my eye here",
-        "ngl, this is worth keeping on the radar",
-        "curious to see what happens next here",
-    ]
-
-
 def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
     if post_seen(db, post.id) and telegram_already_sent(db, post.id):
         logger.info("SEEN | %s | %s", handle, post.id)
@@ -244,18 +212,13 @@ def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
     try:
         replies = generate_replies(post.text)
     except Exception as exc:
-        logger.warning("Groq unavailable for %s; using local reply fallback: %s", post.id, str(exc)[:300])
-        record_activity(db, "reply_generation_fallback", handle, post.id, "Groq unavailable; local reply suggestions used")
-        replies = _fallback_replies(post.text)
+        logger.warning("Groq reply generation failed for %s: %s", post.id, str(exc)[:300])
+        record_activity(db, "error", handle, post.id, f"Groq reply generation failed: {str(exc)[:500]}")
+        return "error"
 
     if not replies or not validate_replies(replies):
-        logger.warning("Reply validation failed for %s; using local fallback", post.id)
-        replies = _fallback_replies(post.text)
-        record_activity(db, "reply_generation_fallback", handle, post.id, "Local fallback used after reply validation failure")
-
-    if not replies or not validate_replies(replies):
-        logger.error("Local reply fallback failed validation for %s", post.id)
-        record_activity(db, "error", handle, post.id, "Both Groq and local reply generation failed validation")
+        logger.error("Groq reply validation failed for %s", post.id)
+        record_activity(db, "error", handle, post.id, "Groq returned invalid reply suggestions")
         return "error"
 
     record_activity(db, "replies_suggested", handle, post.id, f"Three reply suggestions generated from {source}")
