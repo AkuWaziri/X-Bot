@@ -426,7 +426,7 @@ def _parse_replies(raw: str) -> list[str]:
     if not raw or raw.upper().strip() == "NO_REPLY":
         return []
 
-    text = re.sub(r"```(?:text|markdown)?", "", raw, flags=re.IGNORECASE).replace("```", "").strip()
+    text = raw.replace("\\r\\n", "\n").replace("\\n", "\n")\n    text = re.sub(r"```(?:text|markdown)?", "", text, flags=re.IGNORECASE).replace("```", "").strip()
     tagged_matches = list(re.finditer(r"(?<!\w)(R[123])\s*:\s*", text, flags=re.IGNORECASE))
     candidates: list[str] = []
     if len(tagged_matches) >= 3:
