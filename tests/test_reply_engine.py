@@ -29,6 +29,18 @@ R3: curious where this goes once more people try it"""
         self.assertEqual(len(set(replies)), 3)
         self.assertTrue(validate_replies(replies))
 
+    def test_parse_accepts_same_line_r_tags(self):
+        raw = "R1: this is the first useful observation R2: the number here is what caught my eye R3: ngl this part would make me look twice"
+        self.assertEqual(len(_parse_replies(raw)), 3)
+
+    def test_parse_accepts_numbered_replies(self):
+        raw = "1. this rollout actually gives users something useful\\n2. the wallet flow is the detail i noticed first\\n3. curious where this goes once more people try it"
+        self.assertEqual(len(_parse_replies(raw)), 3)
+
+    def test_parse_accepts_markdown_fenced_replies(self):
+        raw = "```text\\nR1: this rollout actually gives users something useful\\nR2: the wallet flow is the detail i noticed first\\nR3: curious where this goes once more people try it\\n```"
+        self.assertEqual(len(_parse_replies(raw)), 3)
+
     def test_short_reply_is_rejected(self):
         self.assertFalse(validate_reply("lol"))
 
