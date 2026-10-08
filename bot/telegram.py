@@ -1,10 +1,12 @@
 import asyncio
 import os
+from datetime import datetime, timedelta, timezone
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from bot.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from bot.monitor import run_monitor_cycle
 from bot.db import (
     get_db,
     get_pending_reply,
@@ -15,6 +17,35 @@ from bot.db import (
     record_activity,
 )
 from bot.x.provider import get_x_provider
+
+
+FEED_SCHEDULE_UTC = ((11, 0), (16, 0), (20, 0))  # 12:00, 17:00, 21:00 WAT
+
+def _next_feed_run(now: datetime | None = None) -> datetime:
+    now = now or datetime.now(timezone.utc)
+    for hour, minute in FEED_SCHEDULE_UTC:
+        candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if candidate > now:
+            return candidate
+    tomorrow = now + timedelta(days=1)
+    hour, minute = FEED_SCHEDULE_UTC[0]
+    return tomorrow.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
+async def _scheduled_feed_loop() -> None:
+    while True:
+        now = datetime.now(timezone.utc)
+        target = _next_feed_run(now)
+        await asyncio.sleep(max(1, (target - now).total_seconds()))
+        try:
+            await asyncio.to_thread(run_monitor_cycle)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Scheduled feed cycle failed")
+
+
+async def _post_init(application: Application) -> None:
+    application.create_task(_scheduled_feed_loop(), name="x-bot-feed-scheduler")
 
 
 def _authorized(update: Update) -> bool:
@@ -184,7 +215,7 @@ def main() -> None:
     webhook_url = f"{base_url}/telegram"
     secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(_post_init).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CallbackQueryHandler(button_callback))
