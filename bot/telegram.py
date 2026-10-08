@@ -6,7 +6,6 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from bot.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-from bot.monitor import run_monitor_cycle
 from bot.db import (
     get_db,
     get_pending_reply,
@@ -33,6 +32,8 @@ def _next_feed_run(now: datetime | None = None) -> datetime:
 
 
 async def _scheduled_feed_loop() -> None:
+    from bot.monitor import run_monitor_cycle
+
     while True:
         now = datetime.now(timezone.utc)
         target = _next_feed_run(now)
