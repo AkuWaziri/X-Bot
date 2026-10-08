@@ -427,7 +427,7 @@ def _parse_replies(raw: str) -> list[str]:
         return []
 
     text = re.sub(r"```(?:text|markdown)?", "", raw, flags=re.IGNORECASE).replace("```", "").strip()
-    tagged_matches = list(re.finditer(r"(?<!\\w)(R[123])\\s*:\\s*", text, flags=re.IGNORECASE))
+    tagged_matches = list(re.finditer(r"(?<!\w)(R[123])\s*:\s*", text, flags=re.IGNORECASE))
     candidates: list[str] = []
     if len(tagged_matches) >= 3:
         tagged = {}
@@ -441,7 +441,7 @@ def _parse_replies(raw: str) -> list[str]:
             candidates = [tagged["R1"], tagged["R2"], tagged["R3"]]
 
     if len(candidates) != 3:
-        numbered_matches = list(re.finditer(r"(?<!\\w)([123])[.)]\\s*", text))
+        numbered_matches = list(re.finditer(r"(?<!\w)([123])[.)]\s*", text))
         if len(numbered_matches) >= 3:
             numbered = {}
             for index, match in enumerate(numbered_matches):
