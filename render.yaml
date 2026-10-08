@@ -23,3 +23,5 @@ services:
         value: fxtwitter
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
