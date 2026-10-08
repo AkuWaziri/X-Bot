@@ -422,16 +422,41 @@ def _valid_reply(reply: str) -> bool:
 
 
 def _parse_replies(raw: str) -> list[str]:
-    if raw.upper().strip() == "NO_REPLY":
+    """Extract three model replies from common tagged, numbered, or plain formats."""
+    if not raw or raw.upper().strip() == "NO_REPLY":
         return []
 
-    tagged = re.findall(
-        r"R[123]\s*:\s*(.*?)(?=\n\s*R[123]\s*:|$)",
-        raw,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
+    text = re.sub(r"```(?:text|markdown)?", "", raw, flags=re.IGNORECASE).replace("```", "").strip()
+    tagged_matches = list(re.finditer(r"(?<!\\w)(R[123])\\s*:\\s*", text, flags=re.IGNORECASE))
+    candidates: list[str] = []
+    if len(tagged_matches) >= 3:
+        tagged = {}
+        for index, match in enumerate(tagged_matches):
+            label = match.group(1).upper()
+            if label in tagged:
+                continue
+            end = tagged_matches[index + 1].start() if index + 1 < len(tagged_matches) else len(text)
+            tagged[label] = text[match.end():end].strip()
+        if all(label in tagged for label in ("R1", "R2", "R3")):
+            candidates = [tagged["R1"], tagged["R2"], tagged["R3"]]
 
-    candidates = tagged if len(tagged) == 3 else [line for line in raw.splitlines() if line.strip()]
+    if len(candidates) != 3:
+        numbered_matches = list(re.finditer(r"(?<!\\w)([123])[.)]\\s*", text))
+        if len(numbered_matches) >= 3:
+            numbered = {}
+            for index, match in enumerate(numbered_matches):
+                label = match.group(1)
+                if label in numbered:
+                    continue
+                end = numbered_matches[index + 1].start() if index + 1 < len(numbered_matches) else len(text)
+                numbered[label] = text[match.end():end].strip()
+            if all(label in numbered for label in ("1", "2", "3")):
+                candidates = [numbered["1"], numbered["2"], numbered["3"]]
+
+    if len(candidates) != 3:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if len(lines) == 3:
+            candidates = lines
 
     replies: list[str] = []
     for candidate in candidates:
@@ -440,9 +465,7 @@ def _parse_replies(raw: str) -> list[str]:
             continue
         if _valid_reply(cleaned) and cleaned not in replies:
             replies.append(cleaned)
-
     return replies
-
 
 def generate_replies(post_text: str) -> list[str] | None:
     """Generate three distinct human-style reply suggestions, or None."""
@@ -465,10 +488,6 @@ def generate_replies(post_text: str) -> list[str] | None:
         raise RuntimeError(f"Groq request failed: {exc}") from exc
 
     raw = (completion.choices[0].message.content or "").strip()
-    if "—" in raw:
-        logger_message = "Model returned an em dash; it will be normalized before validation."
-    else:
-        logger_message = None
     replies = _parse_replies(raw)
 
     if len(replies) != 3:
