@@ -1,5 +1,4 @@
 import asyncio
-import asyncio
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -33,17 +32,24 @@ def _next_feed_run(now: datetime | None = None) -> datetime:
 
 
 async def _scheduled_feed_loop() -> None:
+    import logging
+
     from bot.monitor import run_monitor_cycle
+
+    logger = logging.getLogger(__name__)
+    logger.info("Render feed scheduler started; UTC slots=%s", FEED_SCHEDULE_UTC)
 
     while True:
         now = datetime.now(timezone.utc)
         target = _next_feed_run(now)
+        logger.info("Next scheduled feed at %s UTC", target.isoformat())
         await asyncio.sleep(max(1, (target - now).total_seconds()))
+        logger.info("Starting scheduled feed cycle for %s UTC", target.isoformat())
         try:
             await asyncio.to_thread(run_monitor_cycle)
+            logger.info("Scheduled feed cycle returned for %s UTC", target.isoformat())
         except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Scheduled feed cycle failed")
+            logger.exception("Scheduled feed cycle failed")
 
 
 async def _post_init(application: Application) -> None:
