@@ -1,56 +1,5 @@
 import asyncio
 import os
-import logging
-from datetime import datetime, time as dtime, timezone
-
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
-
-from bot.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-from bot.db import (
-    get_db,
-    get_pending_reply,
-    mark_reply_posted,
-    mark_reply_rejected,
-    mark_reply_selected,
-    mark_reply_pending,
-    record_activity,
-)
-from bot.x.provider import get_x_provider
-
-
-FEED_SCHEDULE_UTC = ((11, 0), (16, 0), (20, 0))  # 12:00, 17:00, 21:00 WAT
-
-
-async def _scheduled_feed_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    from bot.monitor import run_monitor_cycle
-
-    logger = logging.getLogger(__name__)
-    logger.info("Starting scheduled feed cycle at %s UTC", datetime.now(timezone.utc).isoformat())
-    try:
-        await asyncio.to_thread(run_monitor_cycle)
-        logger.info("Scheduled feed cycle completed")
-    except Exception:
-        logger.exception("Scheduled feed cycle failed")
-
-
-async def _post_init(application: Application) -> None:
-    job_queue = application.job_queue
-    if job_queue is None:
-        raise RuntimeError("Telegram JobQueue is unavailable; install python-telegram-bot[job-queue]")
-
-    for hour, minute in FEED_SCHEDULE_UTC:
-        job_queue.run_daily(
-            _scheduled_feed_job,
-            time=dtime(hour=hour, minute=minute, tzinfo=timezone.utc),
-            name=f"x-bot-feed-{hour:02d}{minute:02d}-utc",
-        )
-
-    logging.getLogger(__name__).info(
-        "Registered daily feed jobs for UTC slots: %s", FEED_SCHEDULE_UTC
-    )
-
-
 def _authorized(update: Update) -> bool:
     chat_id = str(update.effective_chat.id) if update.effective_chat else ""
     return bool(TELEGRAM_CHAT_ID) and chat_id == TELEGRAM_CHAT_ID
@@ -218,7 +167,7 @@ def main() -> None:
     webhook_url = f"{base_url}/telegram"
     secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(_post_init).build()
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CallbackQueryHandler(button_callback))
