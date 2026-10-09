@@ -1,5 +1,22 @@
 import asyncio
 import os
+
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+
+from bot.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from bot.db import (
+    get_db,
+    get_pending_reply,
+    mark_reply_posted,
+    mark_reply_rejected,
+    mark_reply_selected,
+    mark_reply_pending,
+    record_activity,
+)
+from bot.x.provider import get_x_provider
+
+
 def _authorized(update: Update) -> bool:
     chat_id = str(update.effective_chat.id) if update.effective_chat else ""
     return bool(TELEGRAM_CHAT_ID) and chat_id == TELEGRAM_CHAT_ID
