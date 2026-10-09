@@ -3,7 +3,7 @@ name: X-Bot Scheduled Feed
 on:
   workflow_dispatch:
   schedule:
-    # Backup trigger: 12:00 PM, 5:00 PM, 9:00 PM WAT (UTC+1).
+    # Primary scheduler: 12:00 PM, 5:00 PM, 9:00 PM WAT (UTC+1).
     - cron: "0 11,16,20 * * *"
 
 concurrency:
