@@ -1,7 +1,7 @@
 import asyncio
 import os
 import logging
-from datetime import time as dtime, timezone
+from datetime import datetime, time as dtime, timezone
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
@@ -26,7 +26,7 @@ async def _scheduled_feed_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     from bot.monitor import run_monitor_cycle
 
     logger = logging.getLogger(__name__)
-    logger.info("Starting scheduled feed cycle at %s UTC", __import__("datetime").datetime.now(timezone.utc).isoformat())
+    logger.info("Starting scheduled feed cycle at %s UTC", datetime.now(timezone.utc).isoformat())
     try:
         await asyncio.to_thread(run_monitor_cycle)
         logger.info("Scheduled feed cycle completed")
