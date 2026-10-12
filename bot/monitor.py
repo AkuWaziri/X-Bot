@@ -398,7 +398,8 @@ def run_monitor_cycle() -> None:
         return
 
     previous_scan = _last_scan_checkpoint(db)
-    window_start = _previous_schedule_start(schedule_start)
+    test_mode = os.getenv("TEST_MODE", "").strip().lower() == "true"
+    window_start = schedule_start if test_mode else _previous_schedule_start(schedule_start)
     # Never let an old/stale checkpoint expand the scan into previous days.
     scan_start = max(previous_scan, window_start) if previous_scan else window_start
     logger.info(
