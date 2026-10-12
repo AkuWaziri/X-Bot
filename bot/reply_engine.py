@@ -475,24 +475,36 @@ def generate_replies(post_text: str) -> list[str] | None:
 
     client = Groq(api_key=GROQ_API_KEY)
 
-    try:
-        completion = client.chat.completions.create(
-            model=GROQ_MODEL,
-            temperature=1.0,
-            max_completion_tokens=1000,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Post:\n{post_text}\n\nReact naturally. Return R1, R2 and R3 only."},
-            ],
-        )
-    except Exception as exc:
-        raise RuntimeError(f"Groq request failed: {exc}") from exc
+    replies: list[str] = []
+    raw = ""
+    for attempt in range(3):
+        user_prompt = f"Post:\n{post_text}\n\nReact naturally. Return exactly R1, R2 and R3 only. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
+        if attempt:
+            user_prompt += (
+                "\n\nYour previous output did not pass validation. Regenerate all three replies. "
+                "Use exactly three lines in this format, with no introduction or extra text:\n"
+                "R1: [reply]\nR2: [reply]\nR3: [reply]"
+            )
+        try:
+            completion = client.chat.completions.create(
+                model=GROQ_MODEL,
+                temperature=1.0,
+                max_completion_tokens=1000,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Groq request failed: {exc}") from exc
 
-    raw = (completion.choices[0].message.content or "").strip()
-    replies = _parse_replies(raw)
+        raw = (completion.choices[0].message.content or "").strip()
+        replies = _parse_replies(raw)
+        if len(replies) == 3:
+            break
 
     if len(replies) != 3:
-        raise RuntimeError(f"Groq returned {len(replies)} valid replies instead of 3")
+        raise RuntimeError(f"Groq returned {len(replies)} valid replies instead of 3 after 3 attempts")
 
     # Final hard guard. This catches anything introduced by future prompt/model
     # changes before a suggestion is stored or sent to Telegram.
