@@ -92,7 +92,7 @@ def _mark_scan_checkpoint(db, scan_at: datetime) -> None:
 
 
 def _schedule_start(now: datetime) -> datetime:
-    """Return the fallback start point used only before a checkpoint exists."""
+    """Return the latest configured UTC schedule slot at or before now."""
     if os.getenv("TEST_MODE", "").strip().lower() == "true":
         minutes = int(os.getenv("TEST_WINDOW_MINUTES", "10"))
         return now - timedelta(minutes=minutes)
@@ -104,9 +104,30 @@ def _schedule_start(now: datetime) -> datetime:
     else:
         current_minutes = now.hour * 60 + now.minute
         eligible = [(hour, minute) for hour, minute in SCHEDULE_TIMES_UTC if hour * 60 + minute <= current_minutes]
-        hour, minute = eligible[-1] if eligible else SCHEDULE_TIMES_UTC[-1]
+        if eligible:
+            hour, minute = eligible[-1]
+        else:
+            # Before today's first slot, the latest slot is 9 PM UTC yesterday.
+            hour, minute = SCHEDULE_TIMES_UTC[-1]
+            return (now - timedelta(days=1)).replace(hour=hour, minute=minute, second=0, microsecond=0)
 
     return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
+def _previous_schedule_start(schedule_start: datetime) -> datetime:
+    """Return the fixed start boundary for this slot's feed window."""
+    slots = [schedule_start.replace(hour=h, minute=m, second=0, microsecond=0) for h, m in SCHEDULE_TIMES_UTC]
+    current_index = next((i for i, slot in enumerate(slots) if slot == schedule_start), None)
+    if current_index is None:
+        return schedule_start - timedelta(hours=5)
+    if current_index > 0:
+        return slots[current_index - 1]
+    return (schedule_start - timedelta(days=1)).replace(hour=SCHEDULE_TIMES_UTC[-1][0], minute=SCHEDULE_TIMES_UTC[-1][1], second=0, microsecond=0)
+
+
+def _within_schedule_grace(now: datetime, schedule_start: datetime) -> bool:
+    """Reject delayed or manually triggered cycles outside the scheduled slot's retry window."""
+    return schedule_start <= now <= schedule_start + timedelta(minutes=20)
 
 
 def _parse_created_at(value: str | None) -> datetime | None:
@@ -363,13 +384,30 @@ def run_monitor_cycle() -> None:
     db = get_db()
     now = datetime.now(timezone.utc)
     schedule_start = _schedule_start(now)
+    if os.getenv("TEST_MODE", "").strip().lower() != "true" and not _within_schedule_grace(now, schedule_start):
+        logger.warning(
+            "OUTSIDE SCHEDULE WINDOW | now=%s | latest_slot=%s | allowed_until=%s | skipping feed",
+            now.isoformat(),
+            _schedule_key(schedule_start),
+            (schedule_start + timedelta(minutes=20)).isoformat(),
+        )
+        return
+
     if _schedule_already_processed(db, schedule_start):
         logger.info("SCHEDULE ALREADY PROCESSED | slot=%s", _schedule_key(schedule_start))
         return
 
     previous_scan = _last_scan_checkpoint(db)
-    scan_start = previous_scan or schedule_start
-    logger.info("Scan range: %s → %s UTC | slot=%s", scan_start.isoformat(), now.isoformat(), _schedule_key(schedule_start))
+    window_start = _previous_schedule_start(schedule_start)
+    # Never let an old/stale checkpoint expand the scan into previous days.
+    scan_start = max(previous_scan, window_start) if previous_scan else window_start
+    logger.info(
+        "Scan range: %s → %s UTC | slot=%s | fixed_window_start=%s",
+        scan_start.isoformat(),
+        now.isoformat(),
+        _schedule_key(schedule_start),
+        window_start.isoformat(),
+    )
 
     had_error = False
     monitored_sent = 0
