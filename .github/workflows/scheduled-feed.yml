@@ -64,5 +64,5 @@ jobs:
           SCHEDULE_SLOT: ""
           # Manual dispatch runs a bounded 10-minute scan for an end-to-end delivery test.
           TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
-          TEST_WINDOW_MINUTES: ${{ github.event_name == 'workflow_dispatch' && '180' || '10' }}
+          TEST_WINDOW_MINUTES: ${{ github.event_name == 'workflow_dispatch' && '300' || '10' }}
         run: python -m bot.monitor
