@@ -7,20 +7,20 @@ on:
   # bot.monitor records completed slots in Supabase to prevent duplicate feeds.
   schedule:
     # 12:00 PM WAT = 11:00 UTC
-    - cron: "2 11 * * *"
-    - cron: "7 11 * * *"
-    - cron: "12 11 * * *"
-    - cron: "17 11 * * *"
+    - cron: "3 11 * * *"
+    - cron: "8 11 * * *"
+    - cron: "13 11 * * *"
+    - cron: "18 11 * * *"
     # 5:00 PM WAT = 16:00 UTC
-    - cron: "2 16 * * *"
-    - cron: "7 16 * * *"
-    - cron: "12 16 * * *"
-    - cron: "17 16 * * *"
+    - cron: "3 16 * * *"
+    - cron: "8 16 * * *"
+    - cron: "13 16 * * *"
+    - cron: "18 16 * * *"
     # 9:00 PM WAT = 20:00 UTC
-    - cron: "2 20 * * *"
-    - cron: "7 20 * * *"
-    - cron: "12 20 * * *"
-    - cron: "17 20 * * *"
+    - cron: "3 20 * * *"
+    - cron: "8 20 * * *"
+    - cron: "13 20 * * *"
+    - cron: "18 20 * * *"
 
 concurrency:
   group: x-bot-scheduler
