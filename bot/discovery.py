@@ -131,7 +131,6 @@ def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts:
         except Exception as exc:
             # Do not hide discovery-provider failures: otherwise the run looks
             # healthy while all five discovery slots silently disappear.
-            import logging
             logging.getLogger(__name__).warning(
                 "DISCOVERY SEARCH FAILED | topic=%s | error=%s",
                 topic.name,
