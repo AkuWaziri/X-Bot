@@ -127,9 +127,18 @@ def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts:
     for topic in topics:
         try:
             posts = provider.search_posts(topic.query, limit=20)
-        except Exception:
+        except Exception as exc:
+            # Do not hide discovery-provider failures: otherwise the run looks
+            # healthy while all five discovery slots silently disappear.
+            import logging
+            logging.getLogger(__name__).warning(
+                "DISCOVERY SEARCH FAILED | topic=%s | error=%s",
+                topic.name,
+                str(exc)[:250],
+            )
             continue
 
+        accepted_for_topic = 0
         for post in posts:
             username = post.username.lstrip("@").lower()
             if not username or username in monitored or not _is_verified(post) or not post.text.strip():
@@ -140,6 +149,14 @@ def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts:
             if score < 5:
                 continue
             candidates.append((post, topic.name, score))
+            accepted_for_topic += 1
+
+        logging.getLogger(__name__).info(
+            "DISCOVERY SEARCH RESULT | topic=%s | returned=%d | qualifying=%d",
+            topic.name,
+            len(posts),
+            accepted_for_topic,
+        )
 
     candidates.sort(key=lambda item: (_created_at(item[0]), item[2]), reverse=True)
 
