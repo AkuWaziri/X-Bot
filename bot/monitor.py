@@ -384,21 +384,30 @@ def run_monitor_cycle() -> None:
     db = get_db()
     now = datetime.now(timezone.utc)
     schedule_start = _schedule_start(now)
-    if os.getenv("TEST_MODE", "").strip().lower() != "true" and not _within_schedule_grace(now, schedule_start):
-        logger.warning(
-            "OUTSIDE SCHEDULE WINDOW | now=%s | latest_slot=%s | allowed_until=%s | skipping feed",
-            now.isoformat(),
-            _schedule_key(schedule_start),
-            (schedule_start + timedelta(minutes=20)).isoformat(),
-        )
-        return
+    test_mode = os.getenv("TEST_MODE", "").strip().lower() == "true"
+    in_grace = _within_schedule_grace(now, schedule_start)
 
+    # GitHub scheduled events can be delayed well beyond their cron minute.
+    # Recover the latest unprocessed slot instead of silently dropping the feed.
+    # The fixed slot window below still prevents scanning older missed windows.
     if _schedule_already_processed(db, schedule_start):
+        if not test_mode and not in_grace:
+            logger.warning(
+                "LATE SCHEDULE RETRY | slot already processed | now=%s | slot=%s",
+                now.isoformat(),
+                _schedule_key(schedule_start),
+            )
         logger.info("SCHEDULE ALREADY PROCESSED | slot=%s", _schedule_key(schedule_start))
         return
 
+    if not test_mode and not in_grace:
+        logger.warning(
+            "LATE SCHEDULE RECOVERY | now=%s | latest_unprocessed_slot=%s | proceeding with that slot's fixed scan window",
+            now.isoformat(),
+            _schedule_key(schedule_start),
+        )
+
     previous_scan = _last_scan_checkpoint(db)
-    test_mode = os.getenv("TEST_MODE", "").strip().lower() == "true"
     window_start = schedule_start if test_mode else _previous_schedule_start(schedule_start)
     # Never let an old/stale checkpoint expand the scan into previous days.
     scan_start = max(previous_scan, window_start) if previous_scan else window_start
