@@ -473,7 +473,7 @@ def generate_replies(post_text: str) -> list[str] | None:
             completion = client.chat.completions.create(
                 model=GROQ_MODEL,
                 temperature=1.0,
-                max_completion_tokens=120,
+                max_completion_tokens=400,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
