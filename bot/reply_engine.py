@@ -1,3 +1,4 @@
+import logging
 import re
 
 from groq import Groq
@@ -484,6 +485,16 @@ def generate_replies(post_text: str) -> list[str] | None:
 
         raw = (completion.choices[0].message.content or "").strip()
         replies = _parse_replies(raw)
+        if len(replies) != 3:
+            # Diagnostic only: expose a short sample of model output, never credentials.
+            logging.warning(
+                "Groq reply parse diagnostic | attempt=%s | finish_reason=%s | raw_chars=%s | parsed=%s | raw_sample=%r",
+                attempt + 1,
+                getattr(completion.choices[0], "finish_reason", None),
+                len(raw),
+                [len(reply) for reply in replies],
+                raw[:500],
+            )
         if len(replies) == 3:
             break
 
