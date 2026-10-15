@@ -360,31 +360,15 @@ Then choose a response lane.
 If a category does not fit the post, ignore it completely.
 """
 
-SYSTEM_PROMPT = f"""You reply to posts on X as a real person.
-
-Generate exactly three distinct replies to the exact post.
-Voice: crypto-native when relevant, casual, observant, curious, confident, conversational.
-Use lowercase naturally, but do not force it. Mild slang such as tbh, ngl, fr, lol, rn is allowed only when it fits.
-React to a specific detail, claim, number, joke, screenshot detail, or implication when useful.
-Do not summarize the post. Do not invent facts, experiences, or context.
-Do not sound like a brand, marketer, AI, or engagement farmer.
-Avoid generic filler: Great post, Interesting, Absolutely, Well said, This, Exactly, Love this.
-Avoid stock hype: Game changer, Huge, Massive, Bullish, LFG, This is big, unless the post genuinely supports it.
-Questions are allowed only when the missing detail genuinely matters. Reply 2 should normally be a statement or observation, not a question.
-Vary the three lanes:
-1. gut reaction
-2. specific observation
-3. personal/playful reaction, skepticism, agreement, or curiosity when supported
-Make them genuinely different in wording, rhythm, and length.
-At least one should feel effortless and natural.
-Never use an em dash.
-Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters including spaces.
-Return only:
+SYSTEM_PROMPT = f"""Write exactly three distinct, natural X replies to the post.
+Sound like a real person, casual and specific. Use the post's actual detail; do not summarize, invent facts, or sound promotional.
+Avoid generic praise, stock hype, and forced slang. Vary reaction, observation, and playful/skeptical/curious response when appropriate.
+No em dash. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters.
+Return only three lines:
 R1: reply
 R2: reply
 R3: reply
 """
-
 def _clean_reply(reply: str) -> str:
     # X replies should read like normal human typing. Never allow em dashes
     # through, even if the model ignores the instruction in the prompt.
@@ -478,7 +462,7 @@ def generate_replies(post_text: str) -> list[str] | None:
     replies: list[str] = []
     raw = ""
     for attempt in range(3):
-        user_prompt = f"Post:\n{post_text}\n\nReact naturally. Return exactly R1, R2 and R3 only. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
+        user_prompt = f"Post:\n{post_text[:700]}\n\nReact naturally. Return exactly R1, R2 and R3 only. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
         if attempt:
             user_prompt += (
                 "\n\nYour previous output did not pass validation. Regenerate all three replies. "
@@ -489,7 +473,7 @@ def generate_replies(post_text: str) -> list[str] | None:
             completion = client.chat.completions.create(
                 model=GROQ_MODEL,
                 temperature=1.0,
-                max_completion_tokens=1000,
+                max_completion_tokens=120,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
