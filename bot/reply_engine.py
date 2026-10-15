@@ -474,7 +474,9 @@ def generate_replies(post_text: str) -> list[str] | None:
             completion = client.chat.completions.create(
                 model=GROQ_MODEL,
                 temperature=1.0,
-                max_completion_tokens=400,
+                max_completion_tokens=1024,
+                reasoning_effort="low",
+                include_reasoning=False,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
