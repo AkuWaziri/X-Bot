@@ -124,19 +124,46 @@ def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts:
 
     monitored = {handle.lstrip("@").lower() for handle in monitored_handles}
     candidates: list[tuple[Post, str, int]] = []
+    search_provider = provider
+    fxtwitter_fallback_attempted = False
 
     for topic in topics:
         try:
-            posts = provider.search_posts(topic.query, limit=20)
+            posts = search_provider.search_posts(topic.query, limit=20)
         except Exception as exc:
-            # Do not hide discovery-provider failures: otherwise the run looks
-            # healthy while all five discovery slots silently disappear.
-            logging.getLogger(__name__).warning(
-                "DISCOVERY SEARCH FAILED | topic=%s | error=%s",
-                topic.name,
-                str(exc)[:250],
-            )
-            continue
+            # FxTwitter profile timelines work, but its search route can return
+            # 404. Fall back to the already-configured authenticated twscrape
+            # session for discovery only; keep monitored-account reads unchanged.
+            if (
+                not fxtwitter_fallback_attempted
+                and "FxTwitter provider request failed" in str(exc)
+                and "404" in str(exc)
+            ):
+                fxtwitter_fallback_attempted = True
+                try:
+                    from bot.x.twscrape import TwscrapeProvider
+
+                    search_provider = TwscrapeProvider()
+                    logging.getLogger(__name__).warning(
+                        "DISCOVERY PROVIDER FALLBACK | from=fxtwitter | to=twscrape"
+                    )
+                    posts = search_provider.search_posts(topic.query, limit=20)
+                except Exception as fallback_exc:
+                    logging.getLogger(__name__).warning(
+                        "DISCOVERY SEARCH FAILED | topic=%s | provider=twscrape | error=%s",
+                        topic.name,
+                        str(fallback_exc)[:250],
+                    )
+                    continue
+            else:
+                # Do not hide provider failures: otherwise the run looks healthy
+                # while all five discovery slots silently disappear.
+                logging.getLogger(__name__).warning(
+                    "DISCOVERY SEARCH FAILED | topic=%s | error=%s",
+                    topic.name,
+                    str(exc)[:250],
+                )
+                continue
 
         accepted_for_topic = 0
         for post in posts:
