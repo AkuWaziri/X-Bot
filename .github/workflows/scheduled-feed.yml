@@ -7,25 +7,16 @@ on:
   schedule:
     # 12:00 PM WAT = 11:00 UTC
     - cron: "3 11 * * *"
-    - cron: "8 11 * * *"
-    - cron: "13 11 * * *"
+    - cron: "10 11 * * *"
     - cron: "18 11 * * *"
-    - cron: "30 11 * * *"
-    - cron: "45 11 * * *"
     # 5:00 PM WAT = 16:00 UTC
     - cron: "3 16 * * *"
-    - cron: "8 16 * * *"
-    - cron: "13 16 * * *"
+    - cron: "10 16 * * *"
     - cron: "18 16 * * *"
-    - cron: "30 16 * * *"
-    - cron: "45 16 * * *"
     # 9:00 PM WAT = 20:00 UTC
     - cron: "3 20 * * *"
-    - cron: "8 20 * * *"
-    - cron: "13 20 * * *"
+    - cron: "10 20 * * *"
     - cron: "18 20 * * *"
-    - cron: "30 20 * * *"
-    - cron: "45 20 * * *"
 
 concurrency:
   group: x-bot-scheduler
