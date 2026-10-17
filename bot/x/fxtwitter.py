@@ -1,3 +1,4 @@
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -27,6 +28,14 @@ class FxTwitterProvider(XProvider):
             with urllib.request.urlopen(request, timeout=FxTwitterProvider.REQUEST_TIMEOUT_SECONDS) as response:
                 status = getattr(response, "status", 200)
                 body = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            # FxTwitter documents HTTP/API 404 for a valid search with no matches.
+            # Treat that as an empty result set instead of invoking the authenticated
+            # twscrape fallback, which can fail independently with X 403s.
+            if path == "/2/search" and exc.code == 404:
+                return {"code": 200, "results": []}
+            raise RuntimeError(f"FxTwitter provider request failed: {exc}") from exc
         except Exception as exc:
             raise RuntimeError(f"FxTwitter provider request failed: {exc}") from exc
 
