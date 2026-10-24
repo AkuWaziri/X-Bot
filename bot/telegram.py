@@ -14,6 +14,7 @@ from bot.db import (
     mark_reply_selected,
     mark_reply_pending,
     record_activity,
+    save_pending_replies,
 )
 from bot.x.provider import get_x_provider
 from bot.project_search import search_project_posts, normalize_handle
@@ -173,9 +174,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
+    from datetime import datetime, timezone
+
     created_at = post.created_at or "time unavailable"
     try:
-        from datetime import datetime, timezone
         parsed = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
@@ -194,9 +196,9 @@ def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
     if replies and len(replies) == 3:
         entry += "\n\n💬 REPLY OPTIONS"
         for number, reply in enumerate(replies, start=1):
-            entry += f"\n{number}. {reply}"
+            entry += f"\n{number}. {reply} ({len(reply)} chars)"
     else:
-        entry += "\n\n⚠️ Could not generate all 3 reply options for this post."
+        entry += "\n\n⚠️ Reply options could not be generated for this post."
     return entry
 
 
@@ -218,35 +220,63 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
-    entries: list[str] = []
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"🔎 PROJECT SEARCH: @{handle}\n"
+            f"Last 60 minutes · {len(posts)} post(s)\n"
+            "Tap a reply button below any post to publish it as a reply to that X post."
+        ),
+    )
+
+    db = None
+    try:
+        db = await asyncio.to_thread(get_db)
+    except Exception as exc:
+        logging.warning("PROJECT SEARCH DB INIT FAILED | error=%s", str(exc)[:200])
+
     for index, post in enumerate(posts, start=1):
+        replies = None
         try:
             replies = await asyncio.to_thread(generate_replies, post.text)
+            if replies and len(replies) == 3 and db is not None:
+                await asyncio.to_thread(
+                    save_pending_replies,
+                    db,
+                    str(post.id),
+                    f"@{post.username.lstrip('@')}",
+                    post.text,
+                    replies,
+                )
         except Exception as exc:
             replies = None
-            logging_error = str(exc)[:180]
-            # Keep the search results useful if Groq is temporarily unavailable.
-            logging.warning("PROJECT REPLY GENERATION FAILED | post_id=%s | error=%s", post.id, logging_error)
-        entries.append(_project_post_entry(index, post, replies))
+            logging.warning(
+                "PROJECT REPLY PREPARATION FAILED | post_id=%s | error=%s",
+                post.id,
+                str(exc)[:200],
+            )
 
-    header = (
-        f"🔎 PROJECT SEARCH: @{handle}\n"
-        f"Last 60 minutes · {len(posts)} post(s) · 3 reply options per post\n\n"
-    )
-    chunks: list[str] = []
-    current = header
-    for entry in entries:
-        addition = entry + "\n\n" + ("─" * 12) + "\n\n"
-        if len(current) + len(addition) > 3800 and current.strip():
-            chunks.append(current.rstrip())
-            current = f"🔎 PROJECT SEARCH: @{handle} (continued)\n\n"
-        current += addition
-    if current.strip():
-        chunks.append(current.rstrip())
+        entry = _project_post_entry(index, post, replies)
+        reply_markup = None
+        if replies and len(replies) == 3 and db is not None:
+            reply_markup = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("1️⃣ POST REPLY 1", callback_data=f"select:1:{post.id}")],
+                    [InlineKeyboardButton("2️⃣ POST REPLY 2", callback_data=f"select:2:{post.id}")],
+                    [InlineKeyboardButton("3️⃣ POST REPLY 3", callback_data=f"select:3:{post.id}")],
+                    [InlineKeyboardButton("❌ REJECT ALL", callback_data=f"reject:{post.id}")],
+                ]
+            )
+        elif replies and len(replies) == 3:
+            entry += "\n\n⚠️ Reply buttons unavailable because pending-reply storage is unavailable."
 
-    for chunk_index, chunk in enumerate(chunks):
-        await context.bot.send_message(chat_id=chat_id, text=chunk[:4096])
-        if chunk_index < len(chunks) - 1:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=entry[:4096],
+            reply_markup=reply_markup,
+        )
+        # Keep Telegram's per-chat message rate comfortably below its limit.
+        if index < len(posts):
             await asyncio.sleep(1.1)
 
 
