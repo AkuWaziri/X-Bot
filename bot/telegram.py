@@ -15,6 +15,8 @@ from bot.db import (
     record_activity,
 )
 from bot.x.provider import get_x_provider
+from bot.project_search import search_project_posts, normalize_handle
+from bot.reply_engine import generate_replies
 
 
 def _authorized(update: Update) -> bool:
@@ -163,7 +165,111 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
-    await update.message.reply_text("X-Bot is online.\n\nUse /status to check the bot.")
+    await update.message.reply_text(
+        "X-Bot is online.\\n\\nUse /status to check the bot.\\n"
+        "Use /project <handle> to search recent posts about any project."
+    )
+
+
+def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
+    created_at = post.created_at or "time unavailable"
+    try:
+        from datetime import datetime, timezone
+        parsed = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        created_at = parsed.astimezone(timezone.utc).strftime("%H:%M UTC")
+    except (TypeError, ValueError):
+        pass
+
+    post_text = post.text.strip()
+    if len(post_text) > 850:
+        post_text = post_text[:847].rstrip() + "..."
+    entry = (
+        f"{index}. @{post.username} · {created_at}\\n"
+        f"{post_text}\\n"
+        f"🔗 {post.url or f'https://x.com/{post.username}/status/{post.id}'}"
+    )
+    if replies and len(replies) == 3:
+        entry += "\\n\\n💬 REPLY OPTIONS"
+        for number, reply in enumerate(replies, start=1):
+            entry += f"\\n{number}. {reply}"
+    else:
+        entry += "\\n\\n⚠️ Could not generate all 3 reply options for this post."
+    return entry
+
+
+async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE, handle: str) -> None:
+    message = update.effective_message
+    chat_id = update.effective_chat.id
+    try:
+        posts = await asyncio.to_thread(search_project_posts, handle, limit=35, window_minutes=60)
+    except Exception as exc:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ Project search failed.\\n\\n{str(exc)[:900]}",
+        )
+        return
+
+    if not posts:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"🔎 No posts mentioning or discussing @{handle} were found in the last 60 minutes.",
+        )
+        return
+
+    entries: list[str] = []
+    for index, post in enumerate(posts, start=1):
+        try:
+            replies = await asyncio.to_thread(generate_replies, post.text)
+        except Exception as exc:
+            replies = None
+            logging_error = str(exc)[:180]
+            # Keep the search results useful if Groq is temporarily unavailable.
+            import logging
+            logging.warning("PROJECT REPLY GENERATION FAILED | post_id=%s | error=%s", post.id, logging_error)
+        entries.append(_project_post_entry(index, post, replies))
+
+    header = (
+        f"🔎 PROJECT SEARCH: @{handle}\\n"
+        f"Last 60 minutes · {len(posts)} post(s) · 3 reply options per post\\n\\n"
+    )
+    chunks: list[str] = []
+    current = header
+    for entry in entries:
+        addition = entry + "\\n\\n" + ("─" * 12) + "\\n\\n"
+        if len(current) + len(addition) > 3800 and current.strip():
+            chunks.append(current.rstrip())
+            current = f"🔎 PROJECT SEARCH: @{handle} (continued)\\n\\n"
+        current += addition
+    if current.strip():
+        chunks.append(current.rstrip())
+
+    for chunk_index, chunk in enumerate(chunks):
+        await context.bot.send_message(chat_id=chat_id, text=chunk[:4096])
+        if chunk_index < len(chunks) - 1:
+            await asyncio.sleep(1.1)
+
+
+async def project(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update) or update.effective_message is None:
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "Usage: /project <x_handle>\\nExample: /project primus_labs"
+        )
+        return
+    try:
+        handle = normalize_handle(context.args[0])
+    except ValueError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+
+    await update.effective_message.reply_text(
+        f"🔎 Searching for posts about @{handle} from the last 60 minutes. "
+        "I’ll send up to 35 results with 3 reply options each."
+    )
+    context.application.create_task(_run_project_search(update, context, handle), update=update)
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -187,6 +293,7 @@ def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
+    application.add_handler(CommandHandler("project", project))
     application.add_handler(CallbackQueryHandler(button_callback))
 
     application.run_webhook(
