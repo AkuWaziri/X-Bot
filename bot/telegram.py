@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -166,7 +167,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
     await update.message.reply_text(
-        "X-Bot is online.\\n\\nUse /status to check the bot.\\n"
+        "X-Bot is online.\n\nUse /status to check the bot.\n"
         "Use /project <handle> to search recent posts about any project."
     )
 
@@ -186,28 +187,27 @@ def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
     if len(post_text) > 850:
         post_text = post_text[:847].rstrip() + "..."
     entry = (
-        f"{index}. @{post.username} · {created_at}\\n"
-        f"{post_text}\\n"
+        f"{index}. @{post.username} · {created_at}\n"
+        f"{post_text}\n"
         f"🔗 {post.url or f'https://x.com/{post.username}/status/{post.id}'}"
     )
     if replies and len(replies) == 3:
-        entry += "\\n\\n💬 REPLY OPTIONS"
+        entry += "\n\n💬 REPLY OPTIONS"
         for number, reply in enumerate(replies, start=1):
-            entry += f"\\n{number}. {reply}"
+            entry += f"\n{number}. {reply}"
     else:
-        entry += "\\n\\n⚠️ Could not generate all 3 reply options for this post."
+        entry += "\n\n⚠️ Could not generate all 3 reply options for this post."
     return entry
 
 
 async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE, handle: str) -> None:
-    message = update.effective_message
     chat_id = update.effective_chat.id
     try:
         posts = await asyncio.to_thread(search_project_posts, handle, limit=35, window_minutes=60)
     except Exception as exc:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"❌ Project search failed.\\n\\n{str(exc)[:900]}",
+            text=f"❌ Project search failed.\n\n{str(exc)[:900]}",
         )
         return
 
@@ -226,21 +226,20 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
             replies = None
             logging_error = str(exc)[:180]
             # Keep the search results useful if Groq is temporarily unavailable.
-            import logging
             logging.warning("PROJECT REPLY GENERATION FAILED | post_id=%s | error=%s", post.id, logging_error)
         entries.append(_project_post_entry(index, post, replies))
 
     header = (
-        f"🔎 PROJECT SEARCH: @{handle}\\n"
-        f"Last 60 minutes · {len(posts)} post(s) · 3 reply options per post\\n\\n"
+        f"🔎 PROJECT SEARCH: @{handle}\n"
+        f"Last 60 minutes · {len(posts)} post(s) · 3 reply options per post\n\n"
     )
     chunks: list[str] = []
     current = header
     for entry in entries:
-        addition = entry + "\\n\\n" + ("─" * 12) + "\\n\\n"
+        addition = entry + "\n\n" + ("─" * 12) + "\n\n"
         if len(current) + len(addition) > 3800 and current.strip():
             chunks.append(current.rstrip())
-            current = f"🔎 PROJECT SEARCH: @{handle} (continued)\\n\\n"
+            current = f"🔎 PROJECT SEARCH: @{handle} (continued)\n\n"
         current += addition
     if current.strip():
         chunks.append(current.rstrip())
@@ -256,7 +255,7 @@ async def project(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if not context.args:
         await update.effective_message.reply_text(
-            "Usage: /project <x_handle>\\nExample: /project primus_labs"
+            "Usage: /project <x_handle>\nExample: /project primus_labs"
         )
         return
     try:
