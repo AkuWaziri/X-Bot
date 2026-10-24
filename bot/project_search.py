@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 import logging
 import re
 
-from bot.config import TWITTERAPIS_API_KEY
 from bot.x.base import Post
 from bot.x.provider import get_x_provider
 
@@ -88,31 +87,28 @@ def search_project_posts(
     primary = provider or get_x_provider()
     raw_posts, primary_succeeded = _search_with_provider(primary, handle, limit)
 
-    # FxTwitter's current search route can return an empty result for an
-    # unsupported endpoint. Do not misreport that as "no posts": use the
-    # configured TwitterAPIs search provider, or surface an actionable error.
+    # FxTwitter's search route may return empty results even when posts exist.
+    # Fall back to the existing authenticated X session (auth_token + ct0),
+    # without requiring a separate TwitterAPIs API key.
     if (
         primary.__class__.__name__ == "FxTwitterProvider"
         and not _has_recent_post(raw_posts, cutoff, now_utc)
     ):
-        if not TWITTERAPIS_API_KEY:
-            raise RuntimeError(
-                "The current X read provider did not return searchable posts. "
-                "Configure TWITTERAPIS_API_KEY for the search fallback, then retry."
-            )
         try:
-            from bot.x.twitterapis import TwitterAPIsProvider
+            from bot.x.twscrape import TwscrapeProvider
 
-            fallback = TwitterAPIsProvider(TWITTERAPIS_API_KEY)
+            fallback = TwscrapeProvider()
             fallback_posts, fallback_succeeded = _search_with_provider(fallback, handle, limit)
             if not fallback_succeeded:
-                raise RuntimeError("TwitterAPIs search requests failed")
+                raise RuntimeError("Authenticated X session search requests failed")
             raw_posts = fallback_posts
             primary_succeeded = True
         except Exception as exc:
-            logging.warning("PROJECT SEARCH FALLBACK ERROR | error=%s", str(exc)[:240])
+            logging.warning("PROJECT SESSION SEARCH FALLBACK ERROR | error=%s", str(exc)[:240])
             raise RuntimeError(
-                "X project search is currently unavailable. Check the TwitterAPIs search credentials/provider and retry."
+                "X project search is unavailable: FxTwitter returned no searchable posts and "
+                "the authenticated X session search failed. Check TWITTERAPIS_X_AUTH_TOKEN "
+                "and TWITTERAPIS_CT0 in Render; X may also be blocking search."
             ) from exc
 
     if not primary_succeeded and not raw_posts:
