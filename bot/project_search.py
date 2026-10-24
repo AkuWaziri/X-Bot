@@ -43,6 +43,14 @@ def _search_queries(handle: str) -> tuple[str, str]:
     return (f"from:{handle} OR @{handle}", f'"{handle}"')
 
 
+def _has_recent_post(posts: list[Post], cutoff: datetime, now_utc: datetime) -> bool:
+    for post in posts:
+        created = _parse_created_at(post.created_at)
+        if created is not None and cutoff <= created <= now_utc and post.text.strip():
+            return True
+    return False
+
+
 def _search_with_provider(provider, handle: str, limit: int) -> tuple[list[Post], bool]:
     collected: list[Post] = []
     had_success = False
@@ -80,19 +88,32 @@ def search_project_posts(
     primary = provider or get_x_provider()
     raw_posts, primary_succeeded = _search_with_provider(primary, handle, limit)
 
-    # FxTwitter's search route may return an empty response even when the
-    # endpoint is unavailable. If configured, try the existing TwitterAPIs
-    # search provider before reporting no results.
-    if not raw_posts and primary.__class__.__name__ != "TwitterAPIsProvider" and TWITTERAPIS_API_KEY:
+    # FxTwitter's current search route can return an empty result for an
+    # unsupported endpoint. Do not misreport that as "no posts": use the
+    # configured TwitterAPIs search provider, or surface an actionable error.
+    if (
+        primary.__class__.__name__ == "FxTwitterProvider"
+        and not _has_recent_post(raw_posts, cutoff, now_utc)
+    ):
+        if not TWITTERAPIS_API_KEY:
+            raise RuntimeError(
+                "The current X read provider did not return searchable posts. "
+                "Configure TWITTERAPIS_API_KEY for the search fallback, then retry."
+            )
         try:
             from bot.x.twitterapis import TwitterAPIsProvider
 
             fallback = TwitterAPIsProvider(TWITTERAPIS_API_KEY)
             fallback_posts, fallback_succeeded = _search_with_provider(fallback, handle, limit)
-            raw_posts.extend(fallback_posts)
-            primary_succeeded = primary_succeeded or fallback_succeeded
+            if not fallback_succeeded:
+                raise RuntimeError("TwitterAPIs search requests failed")
+            raw_posts = fallback_posts
+            primary_succeeded = True
         except Exception as exc:
             logging.warning("PROJECT SEARCH FALLBACK ERROR | error=%s", str(exc)[:240])
+            raise RuntimeError(
+                "X project search is currently unavailable. Check the TwitterAPIs search credentials/provider and retry."
+            ) from exc
 
     if not primary_succeeded and not raw_posts:
         raise RuntimeError(
