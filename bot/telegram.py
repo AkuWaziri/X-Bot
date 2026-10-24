@@ -237,19 +237,47 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     for index, post in enumerate(posts, start=1):
         replies = None
+        allow_buttons = False
         try:
-            replies = await asyncio.to_thread(generate_replies, post.text)
-            if replies and len(replies) == 3 and db is not None:
-                await asyncio.to_thread(
-                    save_pending_replies,
-                    db,
-                    str(post.id),
-                    f"@{post.username.lstrip('@')}",
-                    post.text,
-                    replies,
+            existing = None
+            if db is not None:
+                existing_result = await asyncio.to_thread(
+                    lambda: db.table("pending_replies")
+                    .select("*")
+                    .eq("post_id", str(post.id))
+                    .limit(1)
+                    .execute()
                 )
+                existing = existing_result.data[0] if existing_result.data else None
+
+            if existing and existing.get("status") == "pending":
+                stored = [
+                    str(existing.get("reply_1") or "").strip(),
+                    str(existing.get("reply_2") or "").strip(),
+                    str(existing.get("reply_3") or "").strip(),
+                ]
+                if all(stored):
+                    replies = stored
+                    allow_buttons = True
+            elif existing:
+                # Never reopen a post that has already been selected, posted,
+                # or rejected by the existing reply workflow.
+                replies = None
+            else:
+                replies = await asyncio.to_thread(generate_replies, post.text)
+                if replies and len(replies) == 3 and db is not None:
+                    await asyncio.to_thread(
+                        save_pending_replies,
+                        db,
+                        str(post.id),
+                        f"@{post.username.lstrip('@')}",
+                        post.text,
+                        replies,
+                    )
+                    allow_buttons = True
         except Exception as exc:
             replies = None
+            allow_buttons = False
             logging.warning(
                 "PROJECT REPLY PREPARATION FAILED | post_id=%s | error=%s",
                 post.id,
@@ -258,7 +286,7 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         entry = _project_post_entry(index, post, replies)
         reply_markup = None
-        if replies and len(replies) == 3 and db is not None:
+        if replies and len(replies) == 3 and db is not None and allow_buttons:
             reply_markup = InlineKeyboardMarkup(
                 [
                     [InlineKeyboardButton("1️⃣ POST REPLY 1", callback_data=f"select:1:{post.id}")],
