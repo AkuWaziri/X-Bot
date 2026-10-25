@@ -205,7 +205,7 @@ def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
 async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE, handle: str) -> None:
     chat_id = update.effective_chat.id
     try:
-        posts = await asyncio.to_thread(search_project_posts, handle, limit=35, window_minutes=60)
+        posts = await asyncio.to_thread(search_project_posts, handle, limit=35, window_minutes=120)
     except Exception as exc:
         await context.bot.send_message(
             chat_id=chat_id,
@@ -216,7 +216,7 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not posts:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🔎 No posts mentioning or discussing @{handle} were found in the last 60 minutes.",
+            text=f"🔎 No posts mentioning or discussing @{handle} were found in the last 2 hours.",
         )
         return
 
@@ -224,7 +224,7 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
         chat_id=chat_id,
         text=(
             f"🔎 PROJECT SEARCH: @{handle}\n"
-            f"Last 60 minutes · {len(posts)} post(s)\n"
+            f"Last 2 hours · {len(posts)} post(s)\n"
             "Tap a reply button below any post to publish it as a reply to that X post."
         ),
     )
