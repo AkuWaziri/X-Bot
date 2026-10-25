@@ -71,7 +71,7 @@ def _is_reply_post(post: Post) -> bool:
 def _has_recent_post(posts: list[Post], cutoff: datetime, now_utc: datetime) -> bool:
     for post in posts:
         created = _parse_created_at(post.created_at)
-        if created is not None and cutoff <= created <= now_utc and post.text.strip():
+        if created is not None and cutoff <= created <= now_utc and post.text.strip() and not _is_reply_post(post):
             return True
     return False
 
