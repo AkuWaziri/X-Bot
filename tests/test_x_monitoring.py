@@ -11,6 +11,7 @@ from bot.monitor import (
     _parse_created_at,
     _schedule_already_processed,
     _schedule_start,
+    SCHEDULE_TIMES_UTC,
     _process_handle,
     _process_post,
     _select_handles,
@@ -220,7 +221,7 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
     assert calls[0][1] == 20
 
 
-def test_monitored_handle_selects_newest_qualifying_post_since_scan():
+def test_monitored_handle_sends_all_qualifying_posts_since_scan():
     older_post = Post(
         id="older",
         text="older post",
@@ -251,7 +252,7 @@ def test_monitored_handle_selects_newest_qualifying_post_since_scan():
     monkeypatch.undo()
 
     assert result == "sent"
-    assert processed == ["newest"]
+    assert processed == ["newest", "older"]
 
 
 def test_unresolved_monitored_account_is_soft_skipped(monkeypatch):
@@ -597,3 +598,18 @@ def test_auto_reply_posted_state_is_reused_without_duplicate_post(monkeypatch):
     assert create_calls == []
     assert sent[0]["auto_reply_text"] == "already posted reply"
     assert sent[0]["suggested_replies"] is None
+
+
+def test_schedule_slots_are_90_minutes_apart():
+    slots = list(SCHEDULE_TIMES_UTC)
+    minutes = [hour * 60 + minute for hour, minute in slots]
+    gaps = [minutes[i + 1] - minutes[i] for i in range(len(minutes) - 1)]
+    gaps.append((24 * 60 - minutes[-1]) + minutes[0])
+
+    assert len(slots) == 16
+    assert set(gaps) == {90}
+
+
+def test_schedule_start_uses_latest_90_minute_slot():
+    now = datetime(2026, 10, 25, 11, 19, tzinfo=timezone.utc)
+    assert _schedule_start(now) == datetime(2026, 10, 25, 10, 30, tzinfo=timezone.utc)
