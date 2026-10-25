@@ -50,7 +50,7 @@ class TwscrapeProvider(XProvider):
             )
 
     @staticmethod
-    def _to_post(tweet: Any) -> Post | None:
+    def _to_post(tweet: Any, *, include_replies: bool = False) -> Post | None:
         tweet_id = str(getattr(tweet, "id_str", "") or getattr(tweet, "id", "")).strip()
         text = str(getattr(tweet, "rawContent", "") or "").strip()
         user = getattr(tweet, "user", None)
@@ -62,7 +62,7 @@ class TwscrapeProvider(XProvider):
         if getattr(tweet, "retweetedTweet", None) is not None:
             return None
 
-        if getattr(tweet, "inReplyToTweetId", None) is not None:
+        if not include_replies and getattr(tweet, "inReplyToTweetId", None) is not None:
             return None
 
         created_at = getattr(tweet, "date", None)
@@ -121,7 +121,7 @@ class TwscrapeProvider(XProvider):
         )
         posts: list[Post] = []
         for tweet in tweets:
-            post = self._to_post(tweet)
+            post = self._to_post(tweet, include_replies=True)
             if post is None:
                 continue
             posts.append(post)
