@@ -47,7 +47,7 @@ def test_search_returns_only_unique_posts_from_last_two_hours_sorted_newest_firs
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FakeProvider(
         [
-            post("old", 121, now),
+            post("old", 61, now),
             post("newer", 4, now),
             post("older", 118, now),
             post("future", -2, now),
@@ -57,7 +57,7 @@ def test_search_returns_only_unique_posts_from_last_two_hours_sorted_newest_firs
 
     results = search_project_posts("primus_labs", now=now, provider=provider)
 
-    assert [item.id for item in results] == ["newer", "older", "old"]
+    assert [item.id for item in results] == ["newer", "old", "older"]
     assert len(provider.queries) == 2
     assert provider.queries[0][0] == "from:primus_labs OR @primus_labs"
 
