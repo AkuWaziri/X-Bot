@@ -64,6 +64,25 @@ def test_search_returns_only_unique_posts_from_last_two_hours_sorted_newest_firs
     ]
 
 
+
+def test_search_excludes_replies_but_keeps_main_posts():
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    main_post = post("main", 5, now)
+    reply = Post(
+        id="reply",
+        text="replying to the main post",
+        username="bob",
+        created_at=(now - timedelta(minutes=3)).isoformat(),
+        url="https://x.com/bob/status/reply",
+        raw={"inReplyToTweetId": "main"},
+    )
+    provider = FakeProvider([reply, main_post])
+
+    results = search_project_posts("primus_labs", now=now, provider=provider)
+
+    assert [item.id for item in results] == ["main"]
+
+
 def test_search_caps_results_at_35():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FakeProvider([post(str(i), i, now) for i in range(40)])
