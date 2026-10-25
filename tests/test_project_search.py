@@ -58,8 +58,10 @@ def test_search_returns_only_unique_posts_from_last_two_hours_sorted_newest_firs
     results = search_project_posts("primus_labs", now=now, provider=provider)
 
     assert [item.id for item in results] == ["newer", "old", "older"]
-    assert len(provider.queries) == 2
-    assert provider.queries[0][0] == "from:primus_labs OR @primus_labs"
+    assert len(provider.queries) == 3
+    assert [query for query, _ in provider.queries] == [
+        "from:primus_labs", "@primus_labs", '"primus_labs"'
+    ]
 
 
 def test_search_caps_results_at_35():
