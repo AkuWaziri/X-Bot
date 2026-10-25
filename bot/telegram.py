@@ -352,7 +352,7 @@ async def project(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     await update.effective_message.reply_text(
-        f"🔎 Searching for posts about @{handle} from the last 60 minutes. "
+        f"🔎 Searching for posts about @{handle} from the last 2 hours. "
         "I’ll send up to 35 results with 3 reply options each."
     )
     context.application.create_task(_run_project_search(update, context, handle), update=update)
