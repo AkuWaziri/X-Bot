@@ -2,21 +2,15 @@ name: X-Bot Scheduled Feed
 
 on:
   workflow_dispatch:
-  # GitHub may delay or skip scheduled events. Retry near the slot and later
-  # as a recovery attempt; bot.monitor records completed slots to prevent duplicates.
+  # Feed every 90 minutes, with two retries for GitHub schedule delays.
+  # The monitor records completed slots and ignores duplicate retries.
   schedule:
-    # 12:00 PM WAT = 11:00 UTC
-    - cron: "3 11 * * *"
-    - cron: "10 11 * * *"
-    - cron: "18 11 * * *"
-    # 5:00 PM WAT = 16:00 UTC
-    - cron: "3 16 * * *"
-    - cron: "10 16 * * *"
-    - cron: "18 16 * * *"
-    # 9:00 PM WAT = 20:00 UTC
-    - cron: "3 20 * * *"
-    - cron: "10 20 * * *"
-    - cron: "18 20 * * *"
+    - cron: "3 0,3,6,9,12,15,18,21 * * *"
+    - cron: "10 0,3,6,9,12,15,18,21 * * *"
+    - cron: "18 0,3,6,9,12,15,18,21 * * *"
+    - cron: "33 1,4,7,10,13,16,19,22 * * *"
+    - cron: "40 1,4,7,10,13,16,19,22 * * *"
+    - cron: "48 1,4,7,10,13,16,19,22 * * *"
 
 concurrency:
   group: x-bot-scheduler
