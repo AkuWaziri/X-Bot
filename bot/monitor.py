@@ -18,7 +18,13 @@ logger = logging.getLogger(__name__)
 MONITORED_HANDLES_PER_RUN = 20
 MAX_DISCOVERY_POSTS_PER_RUN = 10
 DISCOVERY_CANDIDATE_POOL_SIZE = 30
-SCHEDULE_TIMES_UTC = ((11, 0), (16, 0), (20, 0))
+# Run a feed cycle every 90 minutes, around the clock.
+SCHEDULE_TIMES_UTC = (
+    (0, 0), (1, 30), (3, 0), (4, 30),
+    (6, 0), (7, 30), (9, 0), (10, 30),
+    (12, 0), (13, 30), (15, 0), (16, 30),
+    (18, 0), (19, 30), (21, 0), (22, 30),
+)
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 SCAN_CHECKPOINT_EVENT = "scan_checkpoint"
 HANDLE_ROTATION_EVENT = "handle_rotation"
@@ -98,16 +104,32 @@ def _schedule_start(now: datetime) -> datetime:
         return now - timedelta(minutes=minutes)
 
     configured = os.getenv("SCHEDULE_SLOT", "").strip()
-    configured_times = {"11": (11, 0), "16": (16, 0), "20": (20, 0)}
-    if configured in configured_times:
-        hour, minute = configured_times[configured]
+    legacy_slots = {"11": (11, 0), "16": (16, 0), "20": (20, 0)}
+    configured_slot = None
+    if configured in legacy_slots:
+        configured_slot = legacy_slots[configured]
+    elif configured:
+        try:
+            hour_text, minute_text = configured.split(":", 1)
+            candidate = (int(hour_text), int(minute_text))
+            if candidate in SCHEDULE_TIMES_UTC:
+                configured_slot = candidate
+        except (ValueError, TypeError):
+            logger.warning("Ignoring invalid SCHEDULE_SLOT=%r", configured)
+
+    if configured_slot is not None:
+        hour, minute = configured_slot
     else:
         current_minutes = now.hour * 60 + now.minute
-        eligible = [(hour, minute) for hour, minute in SCHEDULE_TIMES_UTC if hour * 60 + minute <= current_minutes]
+        eligible = [
+            (hour, minute)
+            for hour, minute in SCHEDULE_TIMES_UTC
+            if hour * 60 + minute <= current_minutes
+        ]
         if eligible:
             hour, minute = eligible[-1]
         else:
-            # Before today's first slot, the latest slot is 9 PM UTC yesterday.
+            # Before today's first slot, use the last 90-minute slot yesterday.
             hour, minute = SCHEDULE_TIMES_UTC[-1]
             return (now - timedelta(days=1)).replace(hour=hour, minute=minute, second=0, microsecond=0)
 
@@ -300,26 +322,49 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
         logger.info("NO FEED | %s | no posts returned", handle)
         return "skipped"
 
-    newest = None
-    newest_created = None
+    qualifying = []
+    seen_ids = set()
     for post in posts:
         parsed = _parse_created_at(post.created_at)
         logger.info("POST | %s | id=%s | created_at=%r | parsed_utc=%s", handle, post.id, post.created_at, parsed.isoformat() if parsed else "INVALID")
         if not _is_recent_for_schedule(post, scan_start, now):
             continue
-        if post_seen(db, post.id) and telegram_already_sent(db, post.id):
+        if post.id in seen_ids or (post_seen(db, post.id) and telegram_already_sent(db, post.id)):
             continue
-        if newest_created is None or (parsed is not None and parsed > newest_created):
-            newest = post
-            newest_created = parsed
+        seen_ids.add(post.id)
+        qualifying.append((post, parsed))
 
-    if newest is None:
-        logger.info("NO FEED | %s | no new qualifying post since last scan", handle)
+    if not qualifying:
+        logger.info("NO FEED | %s | no new qualifying posts since last scan", handle)
         return "skipped"
 
-    if AUTO_REPLY:
-        return _process_post(db, newest, handle, source="monitored account", provider=provider)
-    return _process_post(db, newest, handle, source="monitored account")
+    # Deliver every new qualifying post returned by X for this handle, newest first.
+    qualifying.sort(
+        key=lambda item: item[1] or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    sent = 0
+    had_error = False
+    for post, _ in qualifying:
+        if AUTO_REPLY:
+            result = _process_post(db, post, handle, source="monitored account", provider=provider)
+        else:
+            result = _process_post(db, post, handle, source="monitored account")
+        if result == "sent":
+            sent += 1
+        elif result == "error":
+            had_error = True
+
+    logger.info(
+        "HANDLE COMPLETE | %s | qualifying=%d | sent=%d | errors=%s",
+        handle,
+        len(qualifying),
+        sent,
+        had_error,
+    )
+    if had_error:
+        return "error"
+    return "sent" if sent else "skipped"
 
 
 def _run_discovery(
