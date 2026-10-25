@@ -43,13 +43,13 @@ def test_normalize_handle_rejects_invalid_values(value):
         normalize_handle(value)
 
 
-def test_search_returns_only_unique_posts_from_last_hour_sorted_newest_first():
+def test_search_returns_only_unique_posts_from_last_two_hours_sorted_newest_first():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FakeProvider(
         [
-            post("old", 61, now),
+            post("old", 121, now),
             post("newer", 4, now),
-            post("older", 28, now),
+            post("older", 118, now),
             post("future", -2, now),
             post("newer", 4, now, username="different_author"),
         ]
@@ -57,7 +57,7 @@ def test_search_returns_only_unique_posts_from_last_hour_sorted_newest_first():
 
     results = search_project_posts("primus_labs", now=now, provider=provider)
 
-    assert [item.id for item in results] == ["newer", "older"]
+    assert [item.id for item in results] == ["newer", "older", "old"]
     assert len(provider.queries) == 2
     assert provider.queries[0][0] == "from:primus_labs OR @primus_labs"
 
@@ -77,3 +77,15 @@ def test_search_raises_when_all_provider_queries_fail():
 
     with pytest.raises(RuntimeError, match="X search is currently unavailable"):
         search_project_posts("primus_labs", now=now, provider=provider)
+
+
+def test_search_default_window_is_two_hours():
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    provider = FakeProvider([
+        post("within_window", 119, now),
+        post("outside_window", 121, now),
+    ])
+
+    results = search_project_posts("primus_labs", now=now, provider=provider)
+
+    assert [item.id for item in results] == ["within_window"]
