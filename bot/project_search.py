@@ -37,9 +37,9 @@ def _parse_created_at(value: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _search_queries(handle: str) -> tuple[str, str]:
-    # Include posts from the project account and posts that mention its handle.
-    return (f"from:{handle}", f"@{handle}", f'"{handle}')
+def _search_queries(handle: str) -> tuple[str, str, str]:
+    # Search authored posts, direct mentions, and posts discussing the project name.
+    return (f"from:{handle}", f"@{handle}", f'"{handle}"')
 
 
 def _has_recent_post(posts: list[Post], cutoff: datetime, now_utc: datetime) -> bool:
