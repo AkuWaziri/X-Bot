@@ -221,7 +221,7 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
     assert calls[0][1] == 20
 
 
-def test_monitored_handle_sends_all_qualifying_posts_since_scan():
+def test_monitored_handle_sends_only_newest_qualifying_post():
     older_post = Post(
         id="older",
         text="older post",
@@ -236,7 +236,8 @@ def test_monitored_handle_sends_all_qualifying_posts_since_scan():
     )
 
     processed = []
-    monkeypatch = __import__("pytest").MonkeyPatch()
+    import pytest
+    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
     monkeypatch.setattr(
@@ -252,9 +253,7 @@ def test_monitored_handle_sends_all_qualifying_posts_since_scan():
     monkeypatch.undo()
 
     assert result == "sent"
-    assert processed == ["newest", "older"]
-
-
+    assert processed == ["newest"]
 def test_unresolved_monitored_account_is_soft_skipped(monkeypatch):
     activity = []
     monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
