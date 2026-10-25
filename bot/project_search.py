@@ -42,6 +42,32 @@ def _search_queries(handle: str) -> tuple[str, str, str]:
     return (f"from:{handle}", f"@{handle}", f'"{handle}"')
 
 
+def _is_reply_post(post: Post) -> bool:
+    """Return True when provider metadata identifies this status as a reply."""
+    raw = post.raw or {}
+    reply_fields = (
+        "inReplyToTweetId",
+        "in_reply_to_tweet_id",
+        "in_reply_to_status_id",
+        "inReplyToStatusId",
+        "reply_to_id",
+        "reply_to",
+    )
+    for field in reply_fields:
+        value = raw.get(field)
+        if value not in (None, "", 0, False, [], {}):
+            return True
+
+    # Some providers nest reply metadata in the legacy tweet result object.
+    legacy = raw.get("legacy")
+    if isinstance(legacy, dict):
+        for field in ("in_reply_to_status_id_str", "in_reply_to_status_id"):
+            value = legacy.get(field)
+            if value not in (None, "", 0, False):
+                return True
+    return False
+
+
 def _has_recent_post(posts: list[Post], cutoff: datetime, now_utc: datetime) -> bool:
     for post in posts:
         created = _parse_created_at(post.created_at)
@@ -123,7 +149,7 @@ def search_project_posts(
         if created is None or created < cutoff or created > now_utc:
             continue
         post_id = str(post.id or "").strip()
-        if not post_id or not post.text.strip():
+        if not post_id or not post.text.strip() or _is_reply_post(post):
             continue
         previous = unique.get(post_id)
         if previous is None or created > previous[0]:
