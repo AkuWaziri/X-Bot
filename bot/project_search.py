@@ -8,7 +8,7 @@ from bot.x.provider import get_x_provider
 
 HANDLE_RE = re.compile(r"^[A-Za-z0-9_]{1,15}$")
 MAX_PROJECT_RESULTS = 35
-SEARCH_WINDOW_MINUTES = 60
+SEARCH_WINDOW_MINUTES = 120
 
 
 def normalize_handle(value: str) -> str:
