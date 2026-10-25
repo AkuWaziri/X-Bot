@@ -121,7 +121,7 @@ class TwscrapeProvider(XProvider):
         )
         posts: list[Post] = []
         for tweet in tweets:
-            post = self._to_post(tweet, include_replies=True)
+            post = self._to_post(tweet)
             if post is None:
                 continue
             posts.append(post)
