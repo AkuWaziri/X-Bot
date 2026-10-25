@@ -39,7 +39,7 @@ def _parse_created_at(value: str | None) -> datetime | None:
 
 def _search_queries(handle: str) -> tuple[str, str]:
     # Include posts from the project account and posts that mention its handle.
-    return (f"from:{handle} OR @{handle}", f'"{handle}"')
+    return (f"from:{handle}", f"@{handle}", f'"{handle}')
 
 
 def _has_recent_post(posts: list[Post], cutoff: datetime, now_utc: datetime) -> bool:
