@@ -84,48 +84,61 @@ class FxTwitterProvider(XProvider):
             raw=raw,
         )
 
+    def _get_paginated_posts(
+        self,
+        path: str,
+        params: dict[str, Any],
+        limit: int,
+    ) -> list[Post]:
+        """Read multiple FxTwitter pages because count is a page size, not a total."""
+        target = min(max(int(limit), 1), 100)
+        posts: list[Post] = []
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+
+        while len(posts) < target:
+            request_params = {
+                **params,
+                "count": min(target - len(posts), 100),
+            }
+            if cursor:
+                request_params["cursor"] = cursor
+
+            data = self._request(path, request_params)
+            items = data.get("results") or []
+            for item in items:
+                post = self._to_post(item)
+                if post is not None:
+                    posts.append(post)
+                    if len(posts) >= target:
+                        break
+
+            next_cursor = str((data.get("cursor") or {}).get("bottom") or "").strip()
+            if not items or not next_cursor or next_cursor in seen_cursors:
+                break
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+
+        return posts[:target]
+
     def get_latest_posts(self, handle: str, limit: int = 20) -> list[Post]:
         username = handle.lstrip("@").strip()
         if not username:
             return []
-
-        data = self._request(
+        return self._get_paginated_posts(
             f"/2/profile/{urllib.parse.quote(username, safe='')}/statuses",
-            {"count": min(max(limit, 1), 100)},
+            {},
+            limit,
         )
-
-        posts: list[Post] = []
-        for item in data.get("results") or []:
-            post = self._to_post(item)
-            if post is None:
-                continue
-            posts.append(post)
-            if len(posts) >= limit:
-                break
-        return posts
 
     def search_posts(self, query: str, limit: int = 20) -> list[Post]:
         if not query.strip():
             return []
-
-        data = self._request(
+        return self._get_paginated_posts(
             "/2/search",
-            {
-                "q": query,
-                "feed": "latest",
-                "count": min(max(limit, 1), 100),
-            },
+            {"q": query, "feed": "latest"},
+            limit,
         )
-
-        posts: list[Post] = []
-        for item in data.get("results") or []:
-            post = self._to_post(item)
-            if post is None:
-                continue
-            posts.append(post)
-            if len(posts) >= limit:
-                break
-        return posts
 
     def create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
         # Reading is decoupled from the X web session. Only publishing uses
