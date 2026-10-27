@@ -10,10 +10,16 @@ from bot.x.base import Post
 
 
 class FakeProvider:
-    def __init__(self, posts=None, error=False):
+    def __init__(self, posts=None, error=False, timeline_posts=None):
         self.posts = posts or []
         self.error = error
         self.queries = []
+        self.timeline_posts = timeline_posts
+
+    def get_latest_posts(self, handle, limit=20):
+        if self.timeline_posts is None:
+            raise NotImplementedError
+        return self.timeline_posts[:limit]
 
     def search_posts(self, query, limit=20):
         self.queries.append((query, limit))
@@ -64,6 +70,20 @@ def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_fi
     ]
 
 
+
+
+def test_search_merges_project_timeline_with_search_results():
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    timeline = [post(f"timeline-{i}", i * 5, now, username="primus_labs") for i in range(1, 7)]
+    mentions = [post("mention-1", 2, now, username="bob"), post("mention-2", 3, now, username="carol")]
+    provider = FakeProvider(posts=mentions, timeline_posts=timeline)
+
+    results = search_project_posts("primus_labs", now=now, provider=provider)
+
+    assert len(results) == 8
+    assert {item.id for item in results} == {
+        *(f"timeline-{i}" for i in range(1, 7)), "mention-1", "mention-2"
+    }
 
 def test_search_excludes_replies_but_keeps_main_posts():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
