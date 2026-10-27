@@ -7,6 +7,7 @@ os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 
 from bot.project_search import normalize_handle, search_project_posts
 from bot.x.base import Post
+from bot.x.fxtwitter import FxTwitterProvider
 
 
 class FakeProvider:
@@ -130,3 +131,61 @@ def test_search_default_window_is_three_hours():
     results = search_project_posts("primus_labs", now=now, provider=provider)
 
     assert [item.id for item in results] == ["within_window"]
+
+def test_search_excludes_fxtwitter_replying_to_metadata():
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    original = post("original", 5, now)
+    reply = Post(
+        id="fx-reply",
+        text="reply to another post",
+        username="bob",
+        created_at=(now - timedelta(minutes=3)).isoformat(),
+        url="https://x.com/bob/status/fx-reply",
+        raw={"replying_to": {"screen_name": "alice", "status": "123"}},
+    )
+    provider = FakeProvider([reply, original])
+
+    results = search_project_posts("primus_labs", now=now, provider=provider)
+
+    assert [item.id for item in results] == ["original"]
+
+
+def test_fxtwitter_provider_follows_pagination_cursors(monkeypatch):
+    provider = FxTwitterProvider()
+    calls = []
+
+    def fake_request(path, params=None):
+        calls.append((path, dict(params or {})))
+        if not params.get("cursor"):
+            return {
+                "results": [
+                    {
+                        "type": "status",
+                        "id": "one",
+                        "text": "first",
+                        "author": {"screen_name": "primus_labs"},
+                        "created_at": "Sat Oct 24 19:59:00 +0000 2026",
+                    }
+                ],
+                "cursor": {"bottom": "next-page"},
+            }
+        return {
+            "results": [
+                {
+                    "type": "status",
+                    "id": "two",
+                    "text": "second",
+                    "author": {"screen_name": "primus_labs"},
+                    "created_at": "Sat Oct 24 19:58:00 +0000 2026",
+                }
+            ],
+            "cursor": {"bottom": None},
+        }
+
+    monkeypatch.setattr(provider, "_request", fake_request)
+    results = provider.get_latest_posts("primus_labs", limit=2)
+
+    assert [item.id for item in results] == ["one", "two"]
+    assert len(calls) == 2
+    assert calls[1][1]["cursor"] == "next-page"
+
