@@ -18,7 +18,7 @@ from bot.db import (
 )
 from bot.x.provider import get_x_provider
 from bot.project_search import search_project_posts, normalize_handle
-from bot.reply_engine import generate_replies
+from bot.reply_engine import generate_replies, validate_replies
 
 
 def _authorized(update: Update) -> bool:
@@ -267,11 +267,11 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
                 str(existing.get("reply_2") or "").strip(),
                 str(existing.get("reply_3") or "").strip(),
             ]
-            if all(stored):
+            if validate_replies(stored):
                 replies = stored
                 allow_buttons = True
             else:
-                reply_note = "Saved pending replies were incomplete; generating fresh suggestions."
+                reply_note = "Saved pending replies did not meet the current reply rules; generating fresh suggestions."
         elif existing:
             # Show useful suggestions for previously seen posts, but never
             # expose posting buttons for a post already selected, posted, or rejected.
@@ -281,7 +281,11 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
             try:
                 replies = await asyncio.to_thread(generate_replies, post.text)
                 if replies and len(replies) == 3:
-                    if existing is None and storage_available:
+                    if storage_available and (existing is None or (existing.get("status") == "pending" and not validate_replies([
+                        str(existing.get("reply_1") or "").strip(),
+                        str(existing.get("reply_2") or "").strip(),
+                        str(existing.get("reply_3") or "").strip(),
+                    ]))):
                         try:
                             await asyncio.to_thread(
                                 save_pending_replies,
