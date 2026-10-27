@@ -111,11 +111,37 @@ def search_project_posts(
     cutoff = now_utc - timedelta(minutes=window_minutes)
 
     primary = provider or get_x_provider()
-    raw_posts, primary_succeeded = _search_with_provider(primary, handle, limit)
 
-    # FxTwitter's search route may return empty results even when posts exist.
-    # Fall back to the existing authenticated X session (auth_token + ct0),
-    # without requiring a separate TwitterAPIs API key.
+    # Search endpoints can return a narrow/overlapping sample. Pull the
+    # project's own recent timeline as a separate source, then merge it with
+    # keyword/mention search results before de-duplicating and applying cutoff.
+    raw_posts: list[Post] = []
+    primary_succeeded = False
+    get_latest_posts = getattr(primary, "get_latest_posts", None)
+    if callable(get_latest_posts):
+        try:
+            timeline_posts = get_latest_posts(handle, limit=100)
+            raw_posts.extend(timeline_posts or [])
+            primary_succeeded = True
+            logging.info(
+                "PROJECT TIMELINE FETCH | handle=%s | fetched=%d",
+                handle,
+                len(timeline_posts or []),
+            )
+        except Exception as exc:
+            logging.warning(
+                "PROJECT TIMELINE FETCH FAILED | handle=%s | error=%s",
+                handle,
+                str(exc)[:240],
+            )
+
+    searched_posts, search_succeeded = _search_with_provider(primary, handle, 100)
+    raw_posts.extend(searched_posts)
+    primary_succeeded = primary_succeeded or search_succeeded
+
+    # FxTwitter's search route may return an incomplete/empty sample even when
+    # recent posts exist. If the combined primary results contain no recent
+    # original posts, use the existing authenticated X session as fallback.
     if (
         primary.__class__.__name__ == "FxTwitterProvider"
         and not _has_recent_post(raw_posts, cutoff, now_utc)
