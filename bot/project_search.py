@@ -52,6 +52,7 @@ def _is_reply_post(post: Post) -> bool:
         "inReplyToStatusId",
         "reply_to_id",
         "reply_to",
+        "replying_to",
     )
     for field in reply_fields:
         value = raw.get(field)
