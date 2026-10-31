@@ -384,8 +384,7 @@ VOICE:
 Account voice examples:
 {STYLE_EXAMPLES}
 
-Human reply patterns and context guidance:
-{PUBLIC_HUMAN_REPLY_PATTERNS}
+Do not use a canned phrase bank. Build each reply from the exact wording and meaning of this post; if there is no natural response, do not force praise or a question.
 
 Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, including spaces and punctuation. No em dash.
 Return exactly three lines:
