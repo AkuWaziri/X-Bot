@@ -8,12 +8,19 @@ os.environ.setdefault("MAX_REPLY_CHARS", "69")
 from bot.reply_engine import (
     _clean_reply,
     _parse_replies,
+    SYSTEM_PROMPT,
     validate_reply,
     validate_replies,
 )
 
 
 class ReplyEngineTests(unittest.TestCase):
+    def test_generation_prompt_does_not_inject_canned_phrase_bank(self):
+        self.assertIn("exact detail", SYSTEM_PROMPT.lower())
+        self.assertIn("do not use a canned phrase bank", SYSTEM_PROMPT.lower())
+        self.assertNotIn("this has alpha written all over it", SYSTEM_PROMPT.lower())
+        self.assertNotIn("curious to see what comes from this", SYSTEM_PROMPT.lower())
+
     def test_clean_reply_removes_tag_and_em_dash(self):
         self.assertEqual(
             _clean_reply("R1: shipping fast — users can see the progress"),
