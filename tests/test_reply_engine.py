@@ -16,7 +16,7 @@ from bot.reply_engine import (
 
 class ReplyEngineTests(unittest.TestCase):
     def test_generation_prompt_does_not_inject_canned_phrase_bank(self):
-        self.assertIn("exact detail", SYSTEM_PROMPT.lower())
+        self.assertIn("most specific detail", SYSTEM_PROMPT.lower())
         self.assertIn("do not use a canned phrase bank", SYSTEM_PROMPT.lower())
         self.assertNotIn("this has alpha written all over it", SYSTEM_PROMPT.lower())
         self.assertNotIn("curious to see what comes from this", SYSTEM_PROMPT.lower())
