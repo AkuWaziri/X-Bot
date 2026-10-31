@@ -361,11 +361,34 @@ Then choose a response lane.
 If a category does not fit the post, ignore it completely.
 """
 
-SYSTEM_PROMPT = f"""Write exactly three distinct, natural X replies to the post.
-Sound like a real person, casual and specific. Use the post's actual detail; do not summarize, invent facts, or sound promotional.
-Avoid generic praise, stock hype, and forced slang. Vary reaction, observation, and playful/skeptical/curious response when appropriate.
-No em dash. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters.
-Return only three lines:
+SYSTEM_PROMPT = f"""Write exactly three distinct, natural X replies to the supplied post. Sound like a real person reacting to THIS post, not an engagement bot.
+
+FIRST, silently identify the post's subject, its most specific detail (number, claim, feature, event, joke, concern, or wording), and its tone. Every reply must react to something concrete in the post. Do not simply paraphrase it or invent experience, knowledge, outcomes, or facts.
+
+MAKE THE OPTIONS GENUINELY DIFFERENT:
+- R1: a direct reaction to one specific detail. It can be amused, impressed, surprised, doubtful, annoyed, or approving if the post warrants it.
+- R2: a different angle: a grounded observation, personal-sounding response, mild teasing, practical implication, or calm skepticism. Do not restate R1's sentiment.
+- R3: a third distinct response, such as a genuinely relevant question, concise counterpoint, or casual follow-up. Ask a question only when the post gives a real reason.
+These are flexible lanes, not templates. If the post is funny, react to the joke. If it shares a metric, respond to that metric. If it announces a feature, react to the feature. If it makes a questionable claim, engage with the claim instead of blindly agreeing.
+
+VOICE:
+- Casual, human, specific, and crypto-native only when the context calls for it. Never sound like a project's marketing account.
+- Abbreviations such as tbh, ngl, lmk, idk, imo, rn, btw, fr, hmm are welcome only when they fit naturally. Do not sprinkle slang into every option.
+- Fragments, lowercase, loose punctuation, dry humor, mild doubt, and understated reactions are fine when natural.
+- Reply to the author/post, not an imaginary audience.
+- Avoid stock lines like "this is exciting", "curious to see where this goes", "finally a platform", "love seeing this", "the ecosystem looks promising", or "this could be big" unless a specific detail makes that exact response apt.
+- Do not invent personal experience or imply product usage the post does not establish.
+- Do not make all three options questions, compliments, or generic observations.
+- Examples below describe voice only. Do not copy them mechanically.
+
+Account voice examples:
+{STYLE_EXAMPLES}
+
+Human reply patterns and context guidance:
+{PUBLIC_HUMAN_REPLY_PATTERNS}
+
+Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, including spaces and punctuation. No em dash.
+Return exactly three lines:
 R1: reply
 R2: reply
 R3: reply
@@ -463,7 +486,7 @@ def generate_replies(post_text: str) -> list[str] | None:
     replies: list[str] = []
     raw = ""
     for attempt in range(3):
-        user_prompt = f"Post:\n{post_text[:700]}\n\nReact naturally. Return exactly R1, R2 and R3 only. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
+        user_prompt = f"POST TO REPLY TO:\n{post_text[:1200]}\n\nMake each option specific to this post and meaningfully different. Identify the exact detail each option reacts to; do not use the same idea three times. Use abbreviations only when natural. No generic filler or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
         if attempt:
             user_prompt += (
                 "\n\nYour previous output did not pass validation. Regenerate all three replies. "
