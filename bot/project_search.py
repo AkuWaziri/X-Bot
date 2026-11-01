@@ -52,10 +52,11 @@ def _parse_created_at(value: str | None) -> datetime | None:
 
 
 def _search_queries(query: str) -> tuple[str, ...]:
-    # Handles search authored posts, mentions, and quoted discussion.
-    # Free-text searches both the words as entered and the exact phrase.
+    # A bare single word is ambiguous: it may be a handle or a topic keyword.
+    # Search it broadly as text as well as checking authored posts and mentions.
+    # Multi-word free-text queries search the words as entered and the exact phrase.
     if _is_handle_query(query):
-        return (f"from:{query}", f"@{query}", f'"{query}"')
+        return (query, f"from:{query}", f"@{query}", f'"{query}"')
     phrase = query.replace('"', "").strip()
     return (phrase, f'"{phrase}"')
 
