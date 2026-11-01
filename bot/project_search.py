@@ -52,10 +52,13 @@ def _parse_created_at(value: str | None) -> datetime | None:
 
 
 def _search_queries(query: str) -> tuple[str, ...]:
-    # Both forms are post-content searches. A leading @ is part of the literal
-    # term to find in posts; it must not turn the query into an account search.
-    # Bare words and phrases remain keyword searches.
+    # Search explicit @mentions both literally and without @ because X search
+    # backends do not consistently index the @ prefix. The latter is a fallback
+    # query only; results are deduplicated after retrieval.
     phrase = query.replace('"', "").strip()
+    if _is_handle_query(phrase):
+        handle = phrase[1:]
+        return (phrase, f'"{phrase}"', handle, f'"{handle}"')
     return (phrase, f'"{phrase}"')
 
 
@@ -153,9 +156,14 @@ def search_project_posts(
     # discarded by eligibility filters. When it produces fewer than the
     # requested number of displayable results, supplement it with X session
     # search instead of treating a partial sample as complete.
+    primary_qualifying = _qualifying_post_count(raw_posts, cutoff, now_utc)
+    logging.info(
+        "PROJECT SEARCH PRIMARY SUMMARY | query=%s | provider=%s | raw_count=%s | qualifying_count=%s",
+        query, primary.__class__.__name__, len(raw_posts), primary_qualifying,
+    )
     if (
         primary.__class__.__name__ == "FxTwitterProvider"
-        and _qualifying_post_count(raw_posts, cutoff, now_utc) < limit
+        and primary_qualifying < limit
     ):
         try:
             from bot.x.twscrape import TwscrapeProvider
@@ -172,12 +180,12 @@ def search_project_posts(
             # valid empty result, not a provider outage. Keep its results and let
             # the normal filtering return no matches. Raise only when both the
             # primary search and its authenticated fallback are unavailable.
-            if not primary_succeeded:
+            if not raw_posts:
                 raise RuntimeError(
-                    "X project search is unavailable: FxTwitter search requests failed and "
-                    "the authenticated X session search also failed. Check "
-                    "TWITTERAPIS_X_AUTH_TOKEN and TWITTERAPIS_CT0 in Render; "
-                    "X may also be blocking search."
+                    "X project search returned no usable results and the authenticated "
+                    "fallback failed. This is a provider/search failure, not a confirmed "
+                    "no-match result. Check Render logs and TWITTERAPIS_X_AUTH_TOKEN / "
+                    "TWITTERAPIS_CT0; the FxTwitter endpoint may be unavailable to Render."
                 ) from exc
 
     if not primary_succeeded and not raw_posts:
@@ -187,16 +195,35 @@ def search_project_posts(
         )
 
     unique: dict[str, tuple[datetime, Post]] = {}
+    rejected_missing_date = 0
+    rejected_outside_window = 0
+    rejected_reply = 0
+    rejected_empty = 0
     for post in raw_posts:
         created = _parse_created_at(post.created_at)
-        if created is None or created < cutoff or created > now_utc:
+        if created is None:
+            rejected_missing_date += 1
+            continue
+        if created < cutoff or created > now_utc:
+            rejected_outside_window += 1
             continue
         post_id = str(post.id or "").strip()
-        if not post_id or not post.text.strip() or _is_reply_post(post):
+        if not post_id or not post.text.strip():
+            rejected_empty += 1
+            continue
+        if _is_reply_post(post):
+            rejected_reply += 1
             continue
         previous = unique.get(post_id)
         if previous is None or created > previous[0]:
             unique[post_id] = (created, post)
 
     ordered = sorted(unique.values(), key=lambda item: item[0], reverse=True)
-    return [post for _, post in ordered[:limit]]
+    results = [post for _, post in ordered[:limit]]
+    logging.info(
+        "PROJECT SEARCH FILTER SUMMARY | query=%s | raw_count=%s | unique_count=%s | "
+        "result_count=%s | missing_date=%s | outside_window=%s | replies=%s | empty=%s",
+        query, len(raw_posts), len(unique), len(results), rejected_missing_date,
+        rejected_outside_window, rejected_reply, rejected_empty,
+    )
+    return results
