@@ -389,11 +389,10 @@ def _load_reply_dna_reference() -> str:
 
 
 REPLY_DNA_REFERENCE = _load_reply_dna_reference()
-COMBINED_REPLY_DNA = f"""{REPLY_DNA_REFERENCE}
-
-ADDITIONAL HUMAN REPLY PATTERN DNA:
-{PUBLIC_HUMAN_REPLY_PATTERNS}
-"""
+# Keep the large phrase bank out of the live prompt. It is retained above as
+# documentation/reference material, but feeding every sample to the model
+# encourages repeated, canned replies instead of post-specific reactions.
+COMBINED_REPLY_DNA = REPLY_DNA_REFERENCE
 
 
 SYSTEM_PROMPT = f"""HUMAN REPLY DNA REFERENCES (READ BOTH FIRST):
