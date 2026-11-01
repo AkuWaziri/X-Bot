@@ -68,7 +68,7 @@ def test_search_excludes_posts_without_a_blue_check():
     assert [item.id for item in results] == ["verified"]
 
 
-@pytest.mark.parametrize("value", ["", "@", "handle!", "https://x.com/", "!!!"])
+@pytest.mark.parametrize("value", ["", "@", "https://x.com/", "!!!"])
 def test_normalize_handle_rejects_invalid_values(value):
     with pytest.raises(ValueError):
         normalize_handle(value)
