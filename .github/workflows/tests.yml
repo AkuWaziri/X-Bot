@@ -12,7 +12,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: test-token
       X_PROVIDER_MODE: mock
       MIN_REPLY_CHARS: "20"
-      MAX_REPLY_CHARS: "69"
+      MAX_REPLY_CHARS: "100"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
