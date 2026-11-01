@@ -74,7 +74,7 @@ def test_normalize_handle_rejects_invalid_values(value):
         normalize_handle(value)
 
 
-def test_explicit_at_handle_uses_account_queries_and_timeline():
+def test_explicit_at_handle_searches_literal_mention_text():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FakeProvider([post("handle-post", 2, now)], timeline_posts=[])
 
@@ -82,7 +82,7 @@ def test_explicit_at_handle_uses_account_queries_and_timeline():
 
     assert [item.id for item in results] == ["handle-post"]
     assert [query for query, _ in provider.queries] == [
-        "from:security", "@security", '"security"'
+        "@security", '"@security"'
     ]
 
 
@@ -121,26 +121,27 @@ def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_fi
     results = search_project_posts("@primus_labs", now=now, provider=provider)
 
     assert [item.id for item in results] == ["newer", "old", "older"]
-    assert len(provider.queries) == 3
+    assert len(provider.queries) == 2
     assert [query for query, _ in provider.queries] == [
-        "from:primus_labs", "@primus_labs", '"primus_labs"'
+        "@primus_labs", '"@primus_labs"'
     ]
 
 
 
 
-def test_search_merges_project_timeline_with_search_results():
+def test_handle_search_does_not_replace_mentions_with_profile_timeline():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
-    timeline = [post(f"timeline-{i}", i * 5, now, username="primus_labs") for i in range(1, 7)]
-    mentions = [post("mention-1", 2, now, username="bob"), post("mention-2", 3, now, username="carol")]
-    provider = FakeProvider(posts=mentions, timeline_posts=timeline)
+    timeline = [post("timeline-only", 1, now, username="primus_labs")]
+    mention = post("mention-1", 2, now, username="bob")
+    provider = FakeProvider(posts=[mention], timeline_posts=timeline)
 
     results = search_project_posts("@primus_labs", now=now, provider=provider)
 
-    assert len(results) == 8
-    assert {item.id for item in results} == {
-        *(f"timeline-{i}" for i in range(1, 7)), "mention-1", "mention-2"
-    }
+    assert [item.id for item in results] == ["mention-1"]
+    assert [query for query, _ in provider.queries] == [
+        "@primus_labs", '"@primus_labs"'
+    ]
+
 
 def test_search_excludes_replies_but_keeps_main_posts():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
