@@ -113,7 +113,7 @@ Do not randomly insert regional slang into every reply. Preserve the account own
 8. **No made-up facts.** For political or controversial posts, don't invent motives, allegations, or events.
 9. **Keep disagreement aimed at claims and behavior.** Do not produce slurs, demeaning attacks against protected groups, threats, or harassment. Strong criticism can still be direct.
 10. **Avoid copying.** Treat these as style evidence, not a bank of ready-made replies. Do not repeat the distinctive examples verbatim.
-11. **Respect existing product constraints.** Final generated replies must remain 20–69 characters including spaces and punctuation, and must not contain an em dash. These constraints are independent of the DNA style.
+11. **Respect existing product constraints.** Final generated replies must remain 20–100 characters including spaces and punctuation, and must not contain an em dash. These constraints are independent of the DNA style.
 
 ## The central principle
 
