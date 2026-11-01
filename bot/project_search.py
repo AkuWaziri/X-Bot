@@ -89,10 +89,17 @@ def _is_reply_post(post: Post) -> bool:
     return False
 
 
-def _has_recent_post(posts: list[Post], cutoff: datetime, now_utc: datetime) -> bool:
+def _has_qualifying_post(posts: list[Post], cutoff: datetime, now_utc: datetime) -> bool:
+    """Check whether provider results contain anything the final filters can show."""
     for post in posts:
         created = _parse_created_at(post.created_at)
-        if created is not None and cutoff <= created <= now_utc and post.text.strip() and not _is_reply_post(post):
+        if (
+            created is not None
+            and cutoff <= created <= now_utc
+            and post.text.strip()
+            and _is_verified(post)
+            and not _is_reply_post(post)
+        ):
             return True
     return False
 
@@ -162,12 +169,12 @@ def search_project_posts(
     raw_posts.extend(searched_posts)
     primary_succeeded = primary_succeeded or search_succeeded
 
-    # FxTwitter's search route may return an incomplete/empty sample even when
-    # recent posts exist. If the combined primary results contain no recent
-    # original posts, use the existing authenticated X session as fallback.
+    # FxTwitter can return recent posts that the final filters must discard
+    # (for example, unverified authors or replies). Fall back when there are no
+    # actually displayable results, not merely when the raw response is empty.
     if (
         primary.__class__.__name__ == "FxTwitterProvider"
-        and not _has_recent_post(raw_posts, cutoff, now_utc)
+        and not _has_qualifying_post(raw_posts, cutoff, now_utc)
     ):
         try:
             from bot.x.twscrape import TwscrapeProvider
