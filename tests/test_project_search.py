@@ -206,6 +206,25 @@ def test_search_excludes_fxtwitter_replying_to_metadata():
     assert [item.id for item in results] == ["original"]
 
 
+
+def test_empty_fxtwitter_search_is_not_failed_when_session_fallback_fails(monkeypatch):
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    provider = FxTwitterProvider()
+    monkeypatch.setattr(provider, "search_posts", lambda query, limit=20: [])
+
+    import bot.x.twscrape as twscrape_module
+
+    class FailingFallback:
+        def __init__(self):
+            raise RuntimeError("missing session credentials")
+
+    monkeypatch.setattr(twscrape_module, "TwscrapeProvider", FailingFallback)
+
+    results = search_project_posts("security", now=now, provider=provider)
+
+    assert results == []
+
+
 def test_fxtwitter_provider_follows_pagination_cursors(monkeypatch):
     provider = FxTwitterProvider()
     calls = []
