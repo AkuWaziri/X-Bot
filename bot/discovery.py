@@ -45,7 +45,7 @@ def _engagement(post: Post) -> int:
 
 
 def _is_verified(post: Post) -> bool:
-    """Accept X verified/check-mark signals from dicts and twscrape model objects."""
+    """Fail closed unless provider metadata identifies an X blue check."""
     raw = post.raw or {}
     author = raw.get("author") or raw.get("user") or {}
 
@@ -54,27 +54,35 @@ def _is_verified(post: Post) -> bool:
             return obj.get(key)
         return getattr(obj, key, None)
 
-    values = (
-        _get(raw, "verified"),
-        _get(raw, "is_verified"),
+    # Legacy X/twscrape `verified=True` is the old blue-check field.
+    # Newer providers expose explicit blue-check flags or a verification type.
+    boolean_fields = (
+        (_get(raw, "is_blue_verified"), True),
+        (_get(raw, "blue_verified"), True),
+        (_get(author, "is_blue_verified"), True),
+        (_get(author, "blue_verified"), True),
+        (_get(raw, "verified"), True),
+        (_get(raw, "is_verified"), True),
+        (_get(author, "verified"), True),
+        (_get(author, "is_verified"), True),
+    )
+    for value, expected in boolean_fields:
+        if isinstance(value, bool) and value is expected:
+            return True
+
+    type_fields = (
         _get(raw, "verified_type"),
         _get(raw, "verification_type"),
-        _get(raw, "blue_verified"),
-        _get(raw, "is_blue_verified"),
-        _get(author, "verified"),
-        _get(author, "is_verified"),
         _get(author, "verified_type"),
         _get(author, "verification_type"),
-        _get(author, "blue_verified"),
-        _get(author, "is_blue_verified"),
+        _get((author.get("verification") if isinstance(author, dict) else getattr(author, "verification", None)) or {}, "type"),
     )
-    for value in values:
-        if isinstance(value, bool) and value:
+    for value in type_fields:
+        if isinstance(value, str) and value.strip().lower() in {"blue", "blue_verified", "blue verified", "individual"}:
             return True
-        if isinstance(value, str) and value.strip().lower() not in {"", "false", "none", "null", "unverified"}:
-            return True
-    return False
 
+    # Do not treat generic non-empty strings or gold/gray/business labels as blue.
+    return False
 
 def _created_at(post: Post) -> datetime:
     raw = str(post.created_at or "").strip()
