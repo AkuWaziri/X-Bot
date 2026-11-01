@@ -69,10 +69,19 @@ class FxTwitterProvider(XProvider):
         # FxTwitter exposes the original post/reply state in the status object.
         # Keep the raw response so discovery can inspect engagement and verification.
         raw = dict(item)
+        verification = author.get("verification") or {}
+        verification_type = str(verification.get("type") or "").strip().lower()
+        verified = bool(verification.get("verified"))
+        # FxTwitter reports several badge types. Only an explicit blue badge
+        # (or an older verified signal with no badge type) qualifies.
+        blue_verified = verified and (
+            verification_type in {"blue", "individual", "blue_verified", "blue verified"}
+            or not verification_type
+        )
         raw["author"] = {
             **author,
-            "is_verified": bool((author.get("verification") or {}).get("verified")),
-            "is_blue_verified": bool((author.get("verification") or {}).get("verified")),
+            "is_verified": verified,
+            "is_blue_verified": blue_verified,
         }
 
         return Post(
