@@ -180,11 +180,17 @@ def search_project_posts(
             primary_succeeded = True
         except Exception as exc:
             logging.warning("PROJECT SESSION SEARCH FALLBACK ERROR | error=%s", str(exc)[:240])
-            raise RuntimeError(
-                "X project search is unavailable: FxTwitter returned no searchable posts and "
-                "the authenticated X session search failed. Check TWITTERAPIS_X_AUTH_TOKEN "
-                "and TWITTERAPIS_CT0 in Render; X may also be blocking search."
-            ) from exc
+            # A successful primary search with zero matching/recent posts is a
+            # valid empty result, not a provider outage. Keep its results and let
+            # the normal filtering return no matches. Raise only when both the
+            # primary search and its authenticated fallback are unavailable.
+            if not primary_succeeded:
+                raise RuntimeError(
+                    "X project search is unavailable: FxTwitter search requests failed and "
+                    "the authenticated X session search also failed. Check "
+                    "TWITTERAPIS_X_AUTH_TOKEN and TWITTERAPIS_CT0 in Render; "
+                    "X may also be blocking search."
+                ) from exc
 
     if not primary_succeeded and not raw_posts:
         raise RuntimeError(
