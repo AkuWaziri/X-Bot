@@ -145,7 +145,9 @@ def search_project_posts(
     # an account timeline or account-author query for explicit @handles.
     raw_posts: list[Post] = []
     primary_succeeded = False
-    searched_posts, search_succeeded = _search_with_provider(primary, query, 100)
+    # Request only the amount the command can display; oversized pagination can stall
+    # the Telegram command while walking irrelevant older search pages.
+    searched_posts, search_succeeded = _search_with_provider(primary, query, limit)
     raw_posts.extend(searched_posts)
     primary_succeeded = primary_succeeded or search_succeeded
 
