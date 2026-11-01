@@ -89,19 +89,22 @@ def _is_reply_post(post: Post) -> bool:
     return False
 
 
-def _has_qualifying_post(posts: list[Post], cutoff: datetime, now_utc: datetime) -> bool:
-    """Check whether provider results contain anything the final filters can show."""
+def _qualifying_post_count(posts: list[Post], cutoff: datetime, now_utc: datetime) -> int:
+    """Count unique results that can survive the final eligibility filters."""
+    ids: set[str] = set()
     for post in posts:
         created = _parse_created_at(post.created_at)
+        post_id = str(post.id or "").strip()
         if (
-            created is not None
+            post_id
+            and created is not None
             and cutoff <= created <= now_utc
             and post.text.strip()
             and _is_verified(post)
             and not _is_reply_post(post)
         ):
-            return True
-    return False
+            ids.add(post_id)
+    return len(ids)
 
 
 def _search_with_provider(provider, handle: str, limit: int) -> tuple[list[Post], bool]:
@@ -169,12 +172,13 @@ def search_project_posts(
     raw_posts.extend(searched_posts)
     primary_succeeded = primary_succeeded or search_succeeded
 
-    # FxTwitter can return recent posts that the final filters must discard
-    # (for example, unverified authors or replies). Fall back when there are no
-    # actually displayable results, not merely when the raw response is empty.
+    # FxTwitter can return incomplete samples, and some returned posts are
+    # discarded by eligibility filters. When it produces fewer than the
+    # requested number of displayable results, supplement it with X session
+    # search instead of treating a partial sample as complete.
     if (
         primary.__class__.__name__ == "FxTwitterProvider"
-        and not _has_qualifying_post(raw_posts, cutoff, now_utc)
+        and _qualifying_post_count(raw_posts, cutoff, now_utc) < limit
     ):
         try:
             from bot.x.twscrape import TwscrapeProvider
@@ -183,7 +187,7 @@ def search_project_posts(
             fallback_posts, fallback_succeeded = _search_with_provider(fallback, query, limit)
             if not fallback_succeeded:
                 raise RuntimeError("Authenticated X session search requests failed")
-            raw_posts = fallback_posts
+            raw_posts.extend(fallback_posts)
             primary_succeeded = True
         except Exception as exc:
             logging.warning("PROJECT SESSION SEARCH FALLBACK ERROR | error=%s", str(exc)[:240])
