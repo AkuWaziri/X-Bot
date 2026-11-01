@@ -3,7 +3,7 @@ import unittest
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 os.environ.setdefault("MIN_REPLY_CHARS", "20")
-os.environ.setdefault("MAX_REPLY_CHARS", "69")
+os.environ.setdefault("MAX_REPLY_CHARS", "100")
 
 from bot.reply_engine import (
     _clean_reply,
@@ -59,9 +59,9 @@ R3: curious where this goes once more people try it"""
 
     def test_reply_length_boundaries(self):
         self.assertTrue(validate_reply("x" * 20))
-        self.assertTrue(validate_reply("x" * 69))
+        self.assertTrue(validate_reply("x" * 100))
         self.assertFalse(validate_reply("x" * 19))
-        self.assertFalse(validate_reply("x" * 70))
+        self.assertFalse(validate_reply("x" * 101))
 
 
 if __name__ == "__main__":
