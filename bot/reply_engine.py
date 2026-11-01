@@ -1,5 +1,6 @@
 import logging
 import re
+from pathlib import Path
 
 from groq import Groq
 
@@ -361,7 +362,40 @@ Then choose a response lane.
 If a category does not fit the post, ignore it completely.
 """
 
-SYSTEM_PROMPT = f"""Write exactly three distinct, natural X replies to the supplied post. Sound like a real person reacting to THIS post, not an engagement bot.
+def _load_reply_dna_reference() -> str:
+    """Load the behavioral DNA guidance, excluding raw examples that could become canned replies."""
+    dna_path = Path(__file__).resolve().parents[1] / "docs" / "reply_dna_samples.md"
+    try:
+        document = dna_path.read_text(encoding="utf-8")
+    except OSError:
+        # Keep the generator usable if documentation is omitted from a packaged runtime.
+        return (
+            "Human does not mean polished, positive, insightful, or always polite. "
+            "Match the moment. React to a specific detail; allow blunt reactions, jokes, "
+            "skepticism, disagreement, fragments, and uneven tone when appropriate. "
+            "Do not force praise, questions, slang, emojis, or three identical sentence shapes. "
+            "Never invent facts or personal experience. Critique claims and behavior, not identity."
+        )
+
+    section_start = document.find("## How the generator should apply this DNA")
+    if section_start < 0:
+        return (
+            "Match the moment and react to a specific detail. Prefer natural over polished. "
+            "Do not force praise, questions, slang, or emojis. Never invent facts or personal "
+            "experience; critique claims and behavior, not identity."
+        )
+    # This section contains application rules, not the raw sample phrase bank.
+    return document[section_start:].strip()
+
+
+REPLY_DNA_REFERENCE = _load_reply_dna_reference()
+
+
+SYSTEM_PROMPT = f"""HUMAN REPLY DNA REFERENCE (READ THIS FIRST):
+{REPLY_DNA_REFERENCE}
+
+TASK:
+Write exactly three distinct, natural X replies to the supplied post. Sound like a real person reacting to THIS post, not an engagement bot.
 
 FIRST, silently identify the post's subject, its most specific detail (number, claim, feature, event, joke, concern, or wording), and its tone. Every reply must react to something concrete in the post. Do not simply paraphrase it or invent experience, knowledge, outcomes, or facts.
 
