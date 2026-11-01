@@ -118,8 +118,13 @@ def _search_with_provider(
     had_success = False
     for query in _search_queries(handle):
         try:
-            collected.extend(provider.search_posts(query, limit=min(max(limit, 1), 100)))
+            found = provider.search_posts(query, limit=min(max(limit, 1), 100))
+            collected.extend(found)
             had_success = True
+            logging.info(
+                "PROJECT SEARCH QUERY RESULT | provider=%s | query_variant=%s | returned=%s | collected=%s",
+                provider.__class__.__name__, query, len(found), len(collected),
+            )
             # Stop once enough unique, in-window, non-reply posts are available.
             # This prevents trying every fallback spelling when the first query
             # already filled the user's result quota.
