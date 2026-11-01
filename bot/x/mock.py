@@ -18,6 +18,7 @@ class MockXProvider(XProvider):
                 username=username,
                 created_at=(self.now - timedelta(minutes=2)).isoformat(),
                 url=f"https://x.com/{username}/status/mock-{username}-current",
+                raw={"author": {"username": username, "is_blue_verified": True}},
             ),
             Post(
                 id=f"mock-{username}-old",
@@ -25,6 +26,7 @@ class MockXProvider(XProvider):
                 username=username,
                 created_at=(self.now - timedelta(hours=2)).isoformat(),
                 url=f"https://x.com/{username}/status/mock-{username}-old",
+                raw={"author": {"username": username, "is_blue_verified": True}},
             ),
         ][:limit]
 
