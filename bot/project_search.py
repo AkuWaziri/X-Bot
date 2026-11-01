@@ -4,7 +4,6 @@ import re
 
 from bot.x.base import Post
 from bot.x.provider import get_x_provider
-from bot.discovery import _is_verified
 
 
 HANDLE_RE = re.compile(r"^[A-Za-z0-9_]{1,15}$")
@@ -98,7 +97,6 @@ def _qualifying_post_count(posts: list[Post], cutoff: datetime, now_utc: datetim
             and created is not None
             and cutoff <= created <= now_utc
             and post.text.strip()
-            and _is_verified(post)
             and not _is_reply_post(post)
         ):
             ids.add(post_id)
@@ -192,9 +190,6 @@ def search_project_posts(
     for post in raw_posts:
         created = _parse_created_at(post.created_at)
         if created is None or created < cutoff or created > now_utc:
-            continue
-        if not _is_verified(post):
-            logging.info("PROJECT SEARCH UNVERIFIED POST SKIPPED | query=%s | post_id=%s | author=%s", query, post.id, post.username)
             continue
         post_id = str(post.id or "").strip()
         if not post_id or not post.text.strip() or _is_reply_post(post):
