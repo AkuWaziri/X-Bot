@@ -301,7 +301,7 @@ Humans often type compressed reactions rather than complete sentences:
 - same here
 - honestly yeah
 - yeah, pretty much
-These are building blocks, not automatic replies. A standalone short form is valid only when it fits the actual post and still satisfies the 20-69 character rule.
+These are building blocks, not automatic replies. A standalone short form is valid only when it fits the actual post and still satisfies the 20-100 character rule.
 
 TWITTER / X NATIVE BEHAVIOR:
 - React to one phrase, number, screenshot detail, announcement detail, or punchline.
