@@ -235,7 +235,7 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not posts:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🔎 No verified posts matching {label} were found in the last 3 hours.",
+            text=f"🔎 No matching posts for {label} were found in the last 3 hours.",
         )
         return
 
