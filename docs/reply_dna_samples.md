@@ -63,7 +63,7 @@ These can work when the post is about a lesson, strategy, work, or a real trade-
 ### 1. Short reaction
 Examples of the *shape*: “Accurate”, “Yup”, “Facts”, “Exactly”, “Based”, “Lmao”, “Wtf”, “Bro what”, “Dead 💀”, “I’m screaming”.
 
-Use for a genuinely obvious, funny, shocking, or relatable post. Short replies can be natural, but X-Bot's existing validator still requires 20–69 characters; expand only when the context gives you something real to say. Never pad with generic praise just to hit the limit.
+Use for a genuinely obvious, funny, shocking, or relatable post. Short replies can be natural, but X-Bot's existing validator still requires 20–100 characters; expand only when the context gives you something real to say. Never pad with generic praise just to hit the limit.
 
 ### 2. Sarcasm and irony
 Shapes: “Who knew.”, “I’m flabbergasted.”, “This is rich.”, mock surprise, dry understatement, or a pointed contrast.
