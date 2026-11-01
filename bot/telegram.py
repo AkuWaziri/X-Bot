@@ -205,14 +205,32 @@ def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
 async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
     chat_id = update.effective_chat.id
     label = query
+    logging.info("PROJECT SEARCH STARTED | query=%s | window_minutes=180 | limit=35", query)
     try:
-        posts = await asyncio.to_thread(search_project_posts, query, limit=35, window_minutes=180)
+        # Bound the user-facing wait even if a provider/library stalls unexpectedly.
+        posts = await asyncio.wait_for(
+            asyncio.to_thread(search_project_posts, query, limit=35, window_minutes=180),
+            timeout=90,
+        )
+    except asyncio.TimeoutError:
+        logging.error("PROJECT SEARCH TIMEOUT | query=%s | timeout_seconds=90", query)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"❌ Project search timed out for {label} after 90 seconds.\n\n"
+                "The search provider did not finish. Check the Render logs for "
+                "PROJECT SEARCH TIMEOUT / provider errors, then retry."
+            ),
+        )
+        return
     except Exception as exc:
+        logging.exception("PROJECT SEARCH FAILED | query=%s", query)
         await context.bot.send_message(
             chat_id=chat_id,
             text=f"❌ Project search failed.\n\n{str(exc)[:900]}",
         )
         return
+    logging.info("PROJECT SEARCH COMPLETE | query=%s | result_count=%s", query, len(posts))
 
     if not posts:
         await context.bot.send_message(
