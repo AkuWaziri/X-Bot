@@ -13,13 +13,26 @@ SEARCH_WINDOW_MINUTES = 180
 
 
 def normalize_handle(value: str) -> str:
-    handle = value.strip()
-    if handle.startswith("https://x.com/") or handle.startswith("https://twitter.com/"):
-        handle = handle.rstrip("/").split("/")[-1]
-    handle = handle.lstrip("@")
-    if not HANDLE_RE.fullmatch(handle):
-        raise ValueError("Send one valid X handle, for example: /project primus_labs")
-    return handle
+    """Normalize an X handle or preserve a free-text project/topic query."""
+    query = " ".join(str(value or "").strip().split())
+    if not query:
+        raise ValueError("Enter an X handle or search words, e.g. /project primus_labs or /project tokenized stocks")
+    if query.startswith(("https://x.com/", "https://twitter.com/")):
+        query = query.rstrip("/").split("/")[-1]
+    if query.startswith("@"):
+        handle = query[1:]
+        if HANDLE_RE.fullmatch(handle):
+            return handle
+        raise ValueError("For an X handle, use letters, numbers, and underscores only.")
+    if HANDLE_RE.fullmatch(query):
+        return query
+    if len(query) > 100 or len(query) < 2 or not re.search(r"[A-Za-z0-9]", query):
+        raise ValueError("Search words must be 2–100 characters and include letters or numbers.")
+    return query
+
+
+def _is_handle_query(query: str) -> bool:
+    return bool(HANDLE_RE.fullmatch(query))
 
 
 def _parse_created_at(value: str | None) -> datetime | None:
@@ -38,9 +51,13 @@ def _parse_created_at(value: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _search_queries(handle: str) -> tuple[str, str, str]:
-    # Search authored posts, direct mentions, and posts discussing the project name.
-    return (f"from:{handle}", f"@{handle}", f'"{handle}"')
+def _search_queries(query: str) -> tuple[str, ...]:
+    # Handles search authored posts, mentions, and quoted discussion.
+    # Free-text searches both the words as entered and the exact phrase.
+    if _is_handle_query(query):
+        return (f"from:{query}", f"@{query}", f'"{query}"')
+    phrase = query.replace('"', "").strip()
+    return (phrase, f'"{phrase}"')
 
 
 def _is_reply_post(post: Post) -> bool:
@@ -103,8 +120,9 @@ def search_project_posts(
     now: datetime | None = None,
     provider=None,
 ) -> list[Post]:
-    """Search recent project-related X posts without touching scheduled-feed state."""
-    handle = normalize_handle(project_handle)
+    """Search recent X posts for an account handle or free-text project/topic query."""
+    query = normalize_handle(project_handle)
+    is_handle = _is_handle_query(query)
     limit = min(max(int(limit), 1), MAX_PROJECT_RESULTS)
     now_utc = (now or datetime.now(timezone.utc))
     if now_utc.tzinfo is None:
@@ -120,24 +138,24 @@ def search_project_posts(
     raw_posts: list[Post] = []
     primary_succeeded = False
     get_latest_posts = getattr(primary, "get_latest_posts", None)
-    if callable(get_latest_posts):
+    if is_handle and callable(get_latest_posts):
         try:
-            timeline_posts = get_latest_posts(handle, limit=100)
+            timeline_posts = get_latest_posts(query, limit=100)
             raw_posts.extend(timeline_posts or [])
             primary_succeeded = True
             logging.info(
                 "PROJECT TIMELINE FETCH | handle=%s | fetched=%d",
-                handle,
+                query,
                 len(timeline_posts or []),
             )
         except Exception as exc:
             logging.warning(
                 "PROJECT TIMELINE FETCH FAILED | handle=%s | error=%s",
-                handle,
+                query,
                 str(exc)[:240],
             )
 
-    searched_posts, search_succeeded = _search_with_provider(primary, handle, 100)
+    searched_posts, search_succeeded = _search_with_provider(primary, query, 100)
     raw_posts.extend(searched_posts)
     primary_succeeded = primary_succeeded or search_succeeded
 
@@ -152,7 +170,7 @@ def search_project_posts(
             from bot.x.twscrape import TwscrapeProvider
 
             fallback = TwscrapeProvider()
-            fallback_posts, fallback_succeeded = _search_with_provider(fallback, handle, limit)
+            fallback_posts, fallback_succeeded = _search_with_provider(fallback, query, limit)
             if not fallback_succeeded:
                 raise RuntimeError("Authenticated X session search requests failed")
             raw_posts = fallback_posts
@@ -177,7 +195,7 @@ def search_project_posts(
         if created is None or created < cutoff or created > now_utc:
             continue
         if not _is_verified(post):
-            logging.info("PROJECT SEARCH UNVERIFIED POST SKIPPED | handle=%s | post_id=%s | author=%s", handle, post.id, post.username)
+            logging.info("PROJECT SEARCH UNVERIFIED POST SKIPPED | query=%s | post_id=%s | author=%s", query, post.id, post.username)
             continue
         post_id = str(post.id or "").strip()
         if not post_id or not post.text.strip() or _is_reply_post(post):
