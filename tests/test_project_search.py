@@ -111,9 +111,9 @@ def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_fi
     results = search_project_posts("primus_labs", now=now, provider=provider)
 
     assert [item.id for item in results] == ["newer", "old", "older"]
-    assert len(provider.queries) == 3
+    assert len(provider.queries) == 4
     assert [query for query, _ in provider.queries] == [
-        "from:primus_labs", "@primus_labs", '"primus_labs"'
+        "primus_labs", "from:primus_labs", "@primus_labs", '"primus_labs"'
     ]
 
 
