@@ -53,11 +53,9 @@ def _parse_created_at(value: str | None) -> datetime | None:
 
 
 def _search_queries(query: str) -> tuple[str, ...]:
-    # Explicit @handles search the account and its mentions. Bare words, including
-    # single words, are always keyword queries so /project drain finds discussions.
-    if _is_handle_query(query):
-        handle = query[1:]
-        return (f"from:{handle}", f"@{handle}", f'"{handle}"')
+    # Both forms are post-content searches. A leading @ is part of the literal
+    # term to find in posts; it must not turn the query into an account search.
+    # Bare words and phrases remain keyword searches.
     phrase = query.replace('"', "").strip()
     return (phrase, f'"{phrase}"')
 
@@ -134,8 +132,6 @@ def search_project_posts(
 ) -> list[Post]:
     """Search recent X posts for an account handle or free-text project/topic query."""
     query = normalize_handle(project_handle)
-    is_handle = _is_handle_query(query)
-    handle = query[1:] if is_handle else query
     limit = min(max(int(limit), 1), MAX_PROJECT_RESULTS)
     now_utc = (now or datetime.now(timezone.utc))
     if now_utc.tzinfo is None:
@@ -145,29 +141,10 @@ def search_project_posts(
 
     primary = provider or get_x_provider()
 
-    # Search endpoints can return a narrow/overlapping sample. Pull the
-    # project's own recent timeline as a separate source, then merge it with
-    # keyword/mention search results before de-duplicating and applying cutoff.
+    # Search the post text for the exact user-supplied term. Do not substitute
+    # an account timeline or account-author query for explicit @handles.
     raw_posts: list[Post] = []
     primary_succeeded = False
-    get_latest_posts = getattr(primary, "get_latest_posts", None)
-    if is_handle and callable(get_latest_posts):
-        try:
-            timeline_posts = get_latest_posts(handle, limit=100)
-            raw_posts.extend(timeline_posts or [])
-            primary_succeeded = True
-            logging.info(
-                "PROJECT TIMELINE FETCH | handle=%s | fetched=%d",
-                handle,
-                len(timeline_posts or []),
-            )
-        except Exception as exc:
-            logging.warning(
-                "PROJECT TIMELINE FETCH FAILED | handle=%s | error=%s",
-                query,
-                str(exc)[:240],
-            )
-
     searched_posts, search_succeeded = _search_with_provider(primary, query, 100)
     raw_posts.extend(searched_posts)
     primary_succeeded = primary_succeeded or search_succeeded
