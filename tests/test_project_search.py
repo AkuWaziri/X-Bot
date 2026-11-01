@@ -41,8 +41,8 @@ def post(post_id, minutes_ago, now, username="alice"):
 
 
 def test_normalize_handle_accepts_at_sign_and_profile_url():
-    assert normalize_handle("@primus_labs") == "primus_labs"
-    assert normalize_handle("https://x.com/primus_labs/") == "primus_labs"
+    assert normalize_handle("@primus_labs") == "@primus_labs"
+    assert normalize_handle("https://x.com/primus_labs/") == "@primus_labs"
     assert normalize_handle("tokenized stocks") == "tokenized stocks"
     assert normalize_handle("  stablecoin payments  ") == "stablecoin payments"
 
@@ -74,6 +74,18 @@ def test_normalize_handle_rejects_invalid_values(value):
         normalize_handle(value)
 
 
+def test_explicit_at_handle_uses_account_queries_and_timeline():
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    provider = FakeProvider([post("handle-post", 2, now)], timeline_posts=[])
+
+    results = search_project_posts("@security", now=now, provider=provider)
+
+    assert [item.id for item in results] == ["handle-post"]
+    assert [query for query, _ in provider.queries] == [
+        "from:security", "@security", '"security"'
+    ]
+
+
 def test_free_text_search_uses_unquoted_and_phrase_queries():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FakeProvider([post("stocks", 2, now)])
@@ -91,9 +103,7 @@ def test_single_word_query_searches_broad_keyword_and_handle_variants():
     results = search_project_posts("security", now=now, provider=provider)
 
     assert [item.id for item in results] == ["security"]
-    assert [query for query, _ in provider.queries] == [
-        "security", "from:security", "@security", '"security"'
-    ]
+    assert [query for query, _ in provider.queries] == ["security", '"security"']
 
 
 def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_first():
@@ -108,12 +118,12 @@ def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_fi
         ]
     )
 
-    results = search_project_posts("primus_labs", now=now, provider=provider)
+    results = search_project_posts("@primus_labs", now=now, provider=provider)
 
     assert [item.id for item in results] == ["newer", "old", "older"]
-    assert len(provider.queries) == 4
+    assert len(provider.queries) == 3
     assert [query for query, _ in provider.queries] == [
-        "primus_labs", "from:primus_labs", "@primus_labs", '"primus_labs"'
+        "from:primus_labs", "@primus_labs", '"primus_labs"'
     ]
 
 
