@@ -84,13 +84,18 @@ def test_normalize_handle_rejects_invalid_values(value):
 
 def test_explicit_at_handle_searches_literal_mention_text():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
-    provider = FakeProvider([post("handle-post", 2, now)], timeline_posts=[])
+    matching = post("handle-post", 2, now)
+    matching = Post(
+        id=matching.id, text="A fresh post mentioning @security", username=matching.username,
+        created_at=matching.created_at, url=matching.url, raw=matching.raw,
+    )
+    provider = FakeProvider([matching], timeline_posts=[])
 
     results = search_project_posts("@security", now=now, provider=provider)
 
     assert [item.id for item in results] == ["handle-post"]
     assert [query for query, _ in provider.queries] == [
-        "@security", '"@security"', "security", '"security"', "security", '"security"'
+        "@security", '"@security"', "security", '"security"'
     ]
 
 
