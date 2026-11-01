@@ -90,7 +90,7 @@ def test_explicit_at_handle_searches_literal_mention_text():
 
     assert [item.id for item in results] == ["handle-post"]
     assert [query for query, _ in provider.queries] == [
-        "@security", '"@security"', "security", '"security"'
+        "@security", '"@security"', "security", '"security"', "security", '"security"'
     ]
 
 
@@ -131,7 +131,7 @@ def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_fi
     assert [item.id for item in results] == ["newer", "old", "older"]
     assert len(provider.queries) == 4
     assert [query for query, _ in provider.queries] == [
-        "@primus_labs", '"@primus_labs"', "primus_labs", '"primus_labs"'
+        "@primus_labs", '"@primus_labs"', "primus_labs", '"primus_labs"', "primus", '"primus"'
     ]
 
 
@@ -147,7 +147,7 @@ def test_handle_search_does_not_replace_mentions_with_profile_timeline():
 
     assert [item.id for item in results] == ["mention-1"]
     assert [query for query, _ in provider.queries] == [
-        "@primus_labs", '"@primus_labs"', "primus_labs", '"primus_labs"'
+        "@primus_labs", '"@primus_labs"', "primus_labs", '"primus_labs"', "primus", '"primus"'
     ]
 
 
