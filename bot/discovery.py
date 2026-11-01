@@ -62,9 +62,7 @@ def _is_verified(post: Post) -> bool:
         (_get(author, "is_blue_verified"), True),
         (_get(author, "blue_verified"), True),
         (_get(raw, "verified"), True),
-        (_get(raw, "is_verified"), True),
         (_get(author, "verified"), True),
-        (_get(author, "is_verified"), True),
     )
     for value, expected in boolean_fields:
         if isinstance(value, bool) and value is expected:
@@ -78,7 +76,7 @@ def _is_verified(post: Post) -> bool:
         _get((author.get("verification") if isinstance(author, dict) else getattr(author, "verification", None)) or {}, "type"),
     )
     for value in type_fields:
-        if isinstance(value, str) and value.strip().lower() in {"blue", "blue_verified", "blue verified", "individual"}:
+        if isinstance(value, str) and value.strip().lower() in {"blue", "blue_verified", "blue verified"}:
             return True
 
     # Do not treat generic non-empty strings or gold/gray/business labels as blue.
