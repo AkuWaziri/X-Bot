@@ -27,7 +27,7 @@ class ReplyEngineTests(unittest.TestCase):
         # Raw sample phrases stay out of the live prompt to reduce phrase-copying.
         self.assertNotIn("this has alpha written all over it", SYSTEM_PROMPT.lower())
         self.assertNotIn("curious to see what comes from this", SYSTEM_PROMPT.lower())
-        self.assertIn("20–100 characters", SYSTEM_PROMPT)
+        self.assertIn("20-100 characters", SYSTEM_PROMPT)
 
     def test_clean_reply_removes_tag_and_em_dash(self):
         self.assertEqual(
