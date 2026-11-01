@@ -84,6 +84,18 @@ def test_free_text_search_uses_unquoted_and_phrase_queries():
     ]
 
 
+def test_single_word_query_searches_broad_keyword_and_handle_variants():
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    provider = FakeProvider([post("security", 2, now)])
+
+    results = search_project_posts("security", now=now, provider=provider)
+
+    assert [item.id for item in results] == ["security"]
+    assert [query for query, _ in provider.queries] == [
+        "security", "from:security", "@security", '"security"'
+    ]
+
+
 def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_first():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FakeProvider(
