@@ -204,8 +204,7 @@ def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
 
 async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
     chat_id = update.effective_chat.id
-    is_handle = bool(__import__("re").fullmatch(r"[A-Za-z0-9_]{1,15}", query))
-    label = f"@{query}" if is_handle else query
+    label = query
     try:
         posts = await asyncio.to_thread(search_project_posts, query, limit=35, window_minutes=180)
     except Exception as exc:
@@ -348,9 +347,10 @@ async def project(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if not context.args:
         await update.effective_message.reply_text(
-            "Usage: /project <handle or search words>\n"
-            "Examples: /project primus_labs\n"
-            "/project tokenized stocks"
+            "Usage: /project <@handle or search words>\n"
+            "Examples: /project @primus_labs\n"
+            "/project drain\n"
+            "/project ai agent"
         )
         return
     raw_query = " ".join(context.args)
