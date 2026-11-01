@@ -21,6 +21,8 @@ services:
         sync: false
       - key: X_PROVIDER_MODE
         value: fxtwitter
+      - key: MAX_REPLY_CHARS
+        value: "100"
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
       - key: GROQ_API_KEY
