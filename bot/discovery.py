@@ -117,10 +117,22 @@ def _score(post: Post, topic: DiscoveryTopic) -> int:
     return score
 
 
-def discover_posts(provider: XProvider, monitored_handles: list[str], max_posts: int = 10) -> list[tuple[Post, str, int]]:
-    """Find up to max_posts recent qualifying posts from topic searches."""
-    topics = list(DISCOVERY_TOPICS)
-    random.shuffle(topics)
+def discover_posts(
+    provider: XProvider,
+    monitored_handles: list[str],
+    max_posts: int = 10,
+    topic_names: list[str] | None = None,
+) -> list[tuple[Post, str, int]]:
+    """Find recent qualifying posts from the requested rotating topic subset."""
+    if topic_names is None:
+        topics = list(DISCOVERY_TOPICS)
+        random.shuffle(topics)
+    else:
+        topics_by_name = {topic.name: topic for topic in DISCOVERY_TOPICS}
+        topics = [topics_by_name[name] for name in topic_names if name in topics_by_name]
+        if not topics:
+            topics = list(DISCOVERY_TOPICS)
+            random.shuffle(topics)
 
     monitored = {handle.lstrip("@").lower() for handle in monitored_handles}
     candidates: list[tuple[Post, str, int]] = []
