@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from bot.accounts import load_accounts
 from bot.config import AUTO_REPLY
 from bot.db import get_db, post_seen, record_activity, save_pending_replies, save_post
-from bot.discovery import discover_posts
+from bot.discovery import _is_verified, discover_posts
 from bot.reply_engine import generate_replies, validate_replies
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
@@ -373,6 +373,9 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
     for post in posts:
         parsed = _parse_created_at(post.created_at)
         logger.info("POST | %s | id=%s | created_at=%r | parsed_utc=%s", handle, post.id, post.created_at, parsed.isoformat() if parsed else "INVALID")
+        if not _is_verified(post):
+            logger.info("UNVERIFIED POST SKIPPED | handle=%s | post_id=%s | author=%s", handle, post.id, post.username)
+            continue
         if not _is_recent_for_schedule(post, scan_start, now):
             continue
         if post.id in seen_ids or (post_seen(db, post.id) and telegram_already_sent(db, post.id)):
