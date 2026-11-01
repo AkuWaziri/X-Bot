@@ -18,11 +18,11 @@ def normalize_handle(value: str) -> str:
     if not query:
         raise ValueError("Enter an X handle or search words, e.g. /project primus_labs or /project tokenized stocks")
     if query.startswith(("https://x.com/", "https://twitter.com/")):
-        query = query.rstrip("/").split("/")[-1]
+        query = "@" + query.rstrip("/").split("/")[-1]
     if query.startswith("@"):
         handle = query[1:]
         if HANDLE_RE.fullmatch(handle):
-            return handle
+            return "@" + handle
         raise ValueError("For an X handle, use letters, numbers, and underscores only.")
     if HANDLE_RE.fullmatch(query):
         return query
@@ -32,7 +32,8 @@ def normalize_handle(value: str) -> str:
 
 
 def _is_handle_query(query: str) -> bool:
-    return bool(HANDLE_RE.fullmatch(query))
+    """Only an explicitly prefixed @handle (or profile URL) means account search."""
+    return query.startswith("@") and bool(HANDLE_RE.fullmatch(query[1:]))
 
 
 def _parse_created_at(value: str | None) -> datetime | None:
@@ -52,11 +53,11 @@ def _parse_created_at(value: str | None) -> datetime | None:
 
 
 def _search_queries(query: str) -> tuple[str, ...]:
-    # A bare single word is ambiguous: it may be a handle or a topic keyword.
-    # Search it broadly as text as well as checking authored posts and mentions.
-    # Multi-word free-text queries search the words as entered and the exact phrase.
+    # Explicit @handles search the account and its mentions. Bare words, including
+    # single words, are always keyword queries so /project drain finds discussions.
     if _is_handle_query(query):
-        return (query, f"from:{query}", f"@{query}", f'"{query}"')
+        handle = query[1:]
+        return (f"from:{handle}", f"@{handle}", f'"{handle}"')
     phrase = query.replace('"', "").strip()
     return (phrase, f'"{phrase}"')
 
@@ -107,7 +108,7 @@ def _search_with_provider(provider, handle: str, limit: int) -> tuple[list[Post]
             logging.warning(
                 "PROJECT SEARCH PROVIDER ERROR | provider=%s | query=%s | error=%s",
                 provider.__class__.__name__,
-                query,
+                handle,
                 str(exc)[:240],
             )
     return collected, had_success
@@ -124,6 +125,7 @@ def search_project_posts(
     """Search recent X posts for an account handle or free-text project/topic query."""
     query = normalize_handle(project_handle)
     is_handle = _is_handle_query(query)
+    handle = query[1:] if is_handle else query
     limit = min(max(int(limit), 1), MAX_PROJECT_RESULTS)
     now_utc = (now or datetime.now(timezone.utc))
     if now_utc.tzinfo is None:
@@ -141,12 +143,12 @@ def search_project_posts(
     get_latest_posts = getattr(primary, "get_latest_posts", None)
     if is_handle and callable(get_latest_posts):
         try:
-            timeline_posts = get_latest_posts(query, limit=100)
+            timeline_posts = get_latest_posts(handle, limit=100)
             raw_posts.extend(timeline_posts or [])
             primary_succeeded = True
             logging.info(
                 "PROJECT TIMELINE FETCH | handle=%s | fetched=%d",
-                query,
+                handle,
                 len(timeline_posts or []),
             )
         except Exception as exc:
