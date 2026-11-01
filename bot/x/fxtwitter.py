@@ -1,6 +1,7 @@
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any
 
 from bot.x.base import Post, XProvider
@@ -114,7 +115,14 @@ class FxTwitterProvider(XProvider):
             id=tweet_id,
             text=text,
             username=username,
-            created_at=str(item.get("created_at") or "").strip() or None,
+            created_at=(
+                str(item.get("created_at") or "").strip()
+                or (
+                    datetime.fromtimestamp(float(item["created_timestamp"]), tz=timezone.utc).isoformat()
+                    if item.get("created_timestamp") is not None
+                    else None
+                )
+            ),
             url=str(item.get("url") or f"https://x.com/{username}/status/{tweet_id}"),
             raw=raw,
         )
