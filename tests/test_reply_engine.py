@@ -16,9 +16,9 @@ from bot.reply_engine import (
 
 class ReplyEngineTests(unittest.TestCase):
     def test_generation_prompt_uses_dna_reference_before_task_instructions(self):
-        self.assertIn("human reply dna reference (read this first)", SYSTEM_PROMPT.lower())
+        self.assertIn("human reply dna references (read both first)", SYSTEM_PROMPT.lower())
         self.assertLess(
-            SYSTEM_PROMPT.index("HUMAN REPLY DNA REFERENCE"),
+            SYSTEM_PROMPT.index("HUMAN REPLY DNA REFERENCES"),
             SYSTEM_PROMPT.index("TASK:"),
         )
         self.assertIn("human does not mean polished", SYSTEM_PROMPT.lower())
