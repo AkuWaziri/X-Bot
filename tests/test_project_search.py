@@ -48,24 +48,32 @@ def test_normalize_handle_accepts_at_sign_and_profile_url():
 
 
 
-def test_search_excludes_posts_without_a_blue_check():
+@pytest.mark.parametrize(
+    "author_metadata",
+    [
+        {"username": "alice", "verified": False},
+        {"username": "alice", "verified": True, "verification_type": "gold"},
+        {"username": "alice", "verified": True, "verification_type": "grey"},
+        {"username": "alice", "is_blue_verified": True},
+    ],
+)
+def test_search_does_not_filter_posts_by_badge_type(author_metadata):
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
-    unverified = post("unverified", 2, now)
-    unverified = Post(
-        id=unverified.id,
-        text=unverified.text,
-        username=unverified.username,
-        created_at=unverified.created_at,
-        url=unverified.url,
-        raw={"author": {"username": "alice", "verified": False}},
+    matching = post("matching", 1, now)
+    matching = Post(
+        id=matching.id,
+        text=matching.text,
+        username=matching.username,
+        created_at=matching.created_at,
+        url=matching.url,
+        raw={"author": author_metadata},
     )
-    verified = post("verified", 1, now)
     results = search_project_posts(
         "primus_labs",
         now=now,
-        provider=FakeProvider([unverified, verified]),
+        provider=FakeProvider([matching]),
     )
-    assert [item.id for item in results] == ["verified"]
+    assert [item.id for item in results] == ["matching"]
 
 
 @pytest.mark.parametrize("value", ["", "@", "https://x.com/", "!!!"])
