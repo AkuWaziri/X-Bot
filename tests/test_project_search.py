@@ -207,6 +207,38 @@ def test_search_excludes_fxtwitter_replying_to_metadata():
 
 
 
+
+def test_fxtwitter_unverified_results_trigger_authenticated_fallback(monkeypatch):
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    unverified = Post(
+        id="unverified",
+        text="security issue reported just now",
+        username="alice",
+        created_at=(now - timedelta(minutes=2)).isoformat(),
+        url="https://x.com/alice/status/unverified",
+        raw={"author": {"username": "alice", "verified": False}},
+    )
+    verified = post("verified-fallback", 1, now)
+    provider = FxTwitterProvider()
+    monkeypatch.setattr(provider, "search_posts", lambda query, limit=20: [unverified])
+
+    import bot.x.twscrape as twscrape_module
+
+    class SuccessfulFallback:
+        def __init__(self):
+            self.queries = []
+
+        def search_posts(self, query, limit=20):
+            self.queries.append(query)
+            return [verified]
+
+    monkeypatch.setattr(twscrape_module, "TwscrapeProvider", SuccessfulFallback)
+
+    results = search_project_posts("security", now=now, provider=provider)
+
+    assert [item.id for item in results] == ["verified-fallback"]
+
+
 def test_empty_fxtwitter_search_is_not_failed_when_session_fallback_fails(monkeypatch):
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FxTwitterProvider()
