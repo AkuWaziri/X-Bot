@@ -381,7 +381,7 @@ async def project(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     is_handle = bool(__import__("re").fullmatch(r"[A-Za-z0-9_]{1,15}", query))
     label = f"@{query}" if is_handle else query
     await update.effective_message.reply_text(
-        f"🔎 Searching verified posts matching {label} from the last 3 hours. "
+        f"🔎 Searching posts matching {label} from the last 3 hours. "
         "I’ll send up to 35 results with 3 reply options each."
     )
     context.application.create_task(_run_project_search(update, context, query), update=update)
