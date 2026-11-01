@@ -297,3 +297,42 @@ def test_fxtwitter_provider_follows_pagination_cursors(monkeypatch):
     assert len(calls) == 2
     assert calls[1][1]["cursor"] == "next-page"
 
+
+
+def test_fxtwitter_maps_legacy_author_verified_flag_to_blue_check():
+    post = FxTwitterProvider._to_post({
+        "type": "status",
+        "id": "verified-legacy",
+        "text": "A recent post mentioning @primus_labs",
+        "author": {"screen_name": "alice", "verified": True},
+        "created_at": "Sun Nov 01 16:30:00 +0000 2026",
+    })
+    assert post is not None
+    from bot.discovery import _is_verified
+    assert _is_verified(post)
+
+
+def test_fxtwitter_maps_nested_blue_verification():
+    post = FxTwitterProvider._to_post({
+        "type": "status",
+        "id": "verified-nested",
+        "text": "A recent post mentioning @primus_labs",
+        "author": {"screen_name": "alice", "verification": {"verified": True, "type": "blue"}},
+        "created_at": "Sun Nov 01 16:30:00 +0000 2026",
+    })
+    assert post is not None
+    from bot.discovery import _is_verified
+    assert _is_verified(post)
+
+
+def test_fxtwitter_does_not_accept_explicit_gold_badge_as_blue():
+    post = FxTwitterProvider._to_post({
+        "type": "status",
+        "id": "verified-gold",
+        "text": "A recent post mentioning @primus_labs",
+        "author": {"screen_name": "alice", "verified": True, "verification_type": "gold"},
+        "created_at": "Sun Nov 01 16:30:00 +0000 2026",
+    })
+    assert post is not None
+    from bot.discovery import _is_verified
+    assert not _is_verified(post)
