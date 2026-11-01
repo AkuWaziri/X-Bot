@@ -1,3 +1,4 @@
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -35,6 +36,11 @@ class FxTwitterProvider(XProvider):
             # Treat that as an empty result set instead of invoking the authenticated
             # twscrape fallback, which can fail independently with X 403s.
             if path == "/2/search" and exc.code == 404:
+                logging.info(
+                    "FXTWITTER SEARCH EMPTY | status=404 | query=%s | response=%s",
+                    (params or {}).get("q", ""),
+                    body[:240].replace("\\n", " "),
+                )
                 return {"code": 200, "results": []}
             raise RuntimeError(f"FxTwitter provider request failed: {exc}") from exc
         except Exception as exc:
