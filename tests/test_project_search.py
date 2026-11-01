@@ -135,7 +135,7 @@ def test_search_merges_project_timeline_with_search_results():
     mentions = [post("mention-1", 2, now, username="bob"), post("mention-2", 3, now, username="carol")]
     provider = FakeProvider(posts=mentions, timeline_posts=timeline)
 
-    results = search_project_posts("primus_labs", now=now, provider=provider)
+    results = search_project_posts("@primus_labs", now=now, provider=provider)
 
     assert len(results) == 8
     assert {item.id for item in results} == {
