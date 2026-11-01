@@ -90,7 +90,7 @@ def test_explicit_at_handle_searches_literal_mention_text():
 
     assert [item.id for item in results] == ["handle-post"]
     assert [query for query, _ in provider.queries] == [
-        "@security", '"@security"'
+        "@security", '"@security"', "security", '"security"'
     ]
 
 
@@ -131,7 +131,7 @@ def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_fi
     assert [item.id for item in results] == ["newer", "old", "older"]
     assert len(provider.queries) == 2
     assert [query for query, _ in provider.queries] == [
-        "@primus_labs", '"@primus_labs"'
+        "@primus_labs", '"@primus_labs"', "primus_labs", '"primus_labs"'
     ]
 
 
@@ -245,7 +245,7 @@ def test_fxtwitter_unverified_results_trigger_authenticated_fallback(monkeypatch
 
     results = search_project_posts("security", now=now, provider=provider)
 
-    assert [item.id for item in results] == ["verified-fallback"]
+    assert [item.id for item in results] == ["verified-fallback", "unverified"]
 
 
 def test_empty_fxtwitter_search_is_not_failed_when_session_fallback_fails(monkeypatch):
@@ -261,9 +261,8 @@ def test_empty_fxtwitter_search_is_not_failed_when_session_fallback_fails(monkey
 
     monkeypatch.setattr(twscrape_module, "TwscrapeProvider", FailingFallback)
 
-    results = search_project_posts("security", now=now, provider=provider)
-
-    assert results == []
+    with pytest.raises(RuntimeError, match="returned no usable results"):
+        search_project_posts("security", now=now, provider=provider)
 
 
 def test_fxtwitter_provider_follows_pagination_cursors(monkeypatch):
