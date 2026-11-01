@@ -70,18 +70,44 @@ class FxTwitterProvider(XProvider):
         # Keep the raw response so discovery can inspect engagement and verification.
         raw = dict(item)
         verification = author.get("verification") or {}
-        verification_type = str(verification.get("type") or "").strip().lower()
-        verified = bool(verification.get("verified"))
-        # FxTwitter reports several badge types. Only an explicit blue badge
-        # (or an older verified signal with no badge type) qualifies.
-        blue_verified = verified and (
-            verification_type in {"blue", "individual", "blue_verified", "blue verified"}
-            or not verification_type
+        if not isinstance(verification, dict):
+            verification = {}
+        verification_type = str(
+            verification.get("type")
+            or author.get("verification_type")
+            or author.get("verified_type")
+            or ""
+        ).strip().lower()
+
+        # FxTwitter responses have used more than one verification shape over
+        # time: nested verification.verified, author.verified, and explicit
+        # blue-check/type fields. Normalize those forms before strict filtering.
+        verified_values = (
+            verification.get("verified"),
+            author.get("verified"),
+            author.get("is_verified"),
+            author.get("blue_verified"),
+            author.get("is_blue_verified"),
         )
+        verified = any(value is True for value in verified_values)
+        blue_types = {"blue", "individual", "blue_verified", "blue verified"}
+        non_blue_types = {
+            "business", "government", "gold", "gray", "grey",
+            "organization", "unverified", "none",
+        }
+        if verification_type in non_blue_types:
+            blue_verified = False
+        elif verification_type in blue_types:
+            blue_verified = True
+        else:
+            # Legacy generic verified signals are accepted only when the API
+            # does not identify a different badge category.
+            blue_verified = verified
         raw["author"] = {
             **author,
-            "is_verified": verified,
+            "is_verified": verified or verification_type in blue_types,
             "is_blue_verified": blue_verified,
+            "verification_type": verification_type,
         }
 
         return Post(
