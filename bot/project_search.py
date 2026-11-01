@@ -58,8 +58,24 @@ def _search_queries(query: str) -> tuple[str, ...]:
     phrase = query.replace('"', "").strip()
     if _is_handle_query(phrase):
         handle = phrase[1:]
-        return (phrase, f'"{phrase}"', handle, f'"{handle}"')
+        stem = handle.split("_", 1)[0]
+        variants = [phrase, f'"{phrase}"', handle, f'"{handle}"']
+        # X search can tokenize handles containing underscores inconsistently.
+        # Search the distinctive leading token as a last-resort candidate source;
+        # explicit-handle results are checked locally before being returned.
+        if len(stem) >= 3:
+            variants.extend([stem, f'"{stem}"'])
+        return tuple(dict.fromkeys(variants))
     return (phrase, f'"{phrase}"')
+
+
+def _matches_explicit_handle(post: Post, query: str) -> bool:
+    """Require the searched handle to appear in post text, not just in author metadata."""
+    if not _is_handle_query(query):
+        return True
+    text = (post.text or "").casefold()
+    handle = query[1:].casefold()
+    return f"@{handle}" in text or handle in text
 
 
 def _is_reply_post(post: Post) -> bool:
@@ -89,7 +105,7 @@ def _is_reply_post(post: Post) -> bool:
     return False
 
 
-def _qualifying_post_count(posts: list[Post], cutoff: datetime, now_utc: datetime) -> int:
+def _qualifying_post_count(posts: list[Post], cutoff: datetime, now_utc: datetime, query: str | None = None) -> int:
     """Count unique results that can survive the final eligibility filters."""
     ids: set[str] = set()
     for post in posts:
@@ -97,6 +113,7 @@ def _qualifying_post_count(posts: list[Post], cutoff: datetime, now_utc: datetim
         post_id = str(post.id or "").strip()
         if (
             post_id
+            and _matches_explicit_handle(post, query or "")
             and created is not None
             and cutoff <= created <= now_utc
             and post.text.strip()
@@ -129,7 +146,7 @@ def _search_with_provider(
             # This prevents trying every fallback spelling when the first query
             # already filled the user's result quota.
             if cutoff is not None and now_utc is not None:
-                if _qualifying_post_count(collected, cutoff, now_utc) >= limit:
+                if _qualifying_post_count(collected, cutoff, now_utc, handle) >= limit:
                     break
         except Exception as exc:
             logging.warning(
@@ -174,7 +191,7 @@ def search_project_posts(
     # discarded by eligibility filters. When it produces fewer than the
     # requested number of displayable results, supplement it with X session
     # search instead of treating a partial sample as complete.
-    primary_qualifying = _qualifying_post_count(raw_posts, cutoff, now_utc)
+    primary_qualifying = _qualifying_post_count(raw_posts, cutoff, now_utc, query)
     logging.info(
         "PROJECT SEARCH PRIMARY SUMMARY | query=%s | provider=%s | raw_count=%s | qualifying_count=%s",
         query, primary.__class__.__name__, len(raw_posts), primary_qualifying,
@@ -219,6 +236,8 @@ def search_project_posts(
     rejected_empty = 0
     for post in raw_posts:
         created = _parse_created_at(post.created_at)
+        if not _matches_explicit_handle(post, query):
+            continue
         if created is None:
             rejected_missing_date += 1
             continue
