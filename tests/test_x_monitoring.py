@@ -130,6 +130,24 @@ def test_fxtwitter_status_mapping():
     assert post.raw["author"]["is_verified"] is True
 
 
+def test_fxtwitter_business_badge_is_not_treated_as_blue_check():
+    post = FxTwitterProvider._to_post({
+        "type": "status",
+        "id": "business-badge",
+        "text": "business account post",
+        "author": {
+            "screen_name": "brand",
+            "verification": {"verified": True, "type": "business"},
+        },
+        "created_at": "2026-09-18T17:00:00.000Z",
+    })
+
+    from bot.discovery import _is_verified
+
+    assert post is not None
+    assert _is_verified(post) is False
+
+
 def test_twitter_timestamp_format_is_supported():
     parsed = _parse_created_at("Tue Sep 08 15:23:11 +0000 2026")
     assert parsed == datetime(2026, 9, 8, 15, 23, 11, tzinfo=timezone.utc)
