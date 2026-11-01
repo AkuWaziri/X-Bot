@@ -202,10 +202,12 @@ def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
     return entry
 
 
-async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE, handle: str) -> None:
+async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
     chat_id = update.effective_chat.id
+    is_handle = bool(__import__("re").fullmatch(r"[A-Za-z0-9_]{1,15}", query))
+    label = f"@{query}" if is_handle else query
     try:
-        posts = await asyncio.to_thread(search_project_posts, handle, limit=35, window_minutes=180)
+        posts = await asyncio.to_thread(search_project_posts, query, limit=35, window_minutes=180)
     except Exception as exc:
         await context.bot.send_message(
             chat_id=chat_id,
@@ -216,14 +218,14 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not posts:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🔎 No posts mentioning or discussing @{handle} were found in the last 3 hours.",
+            text=f"🔎 No verified posts matching {label} were found in the last 3 hours.",
         )
         return
 
     await context.bot.send_message(
         chat_id=chat_id,
         text=(
-            f"🔎 PROJECT SEARCH: @{handle}\n"
+            f"🔎 PROJECT SEARCH: {label}\n"
             f"Last 3 hours · {len(posts)} post(s)\n"
             "Tap a reply button below any post to publish it as a reply to that X post."
         ),
@@ -346,20 +348,25 @@ async def project(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if not context.args:
         await update.effective_message.reply_text(
-            "Usage: /project <x_handle>\nExample: /project primus_labs"
+            "Usage: /project <handle or search words>\n"
+            "Examples: /project primus_labs\n"
+            "/project tokenized stocks"
         )
         return
+    raw_query = " ".join(context.args)
     try:
-        handle = normalize_handle(context.args[0])
+        query = normalize_handle(raw_query)
     except ValueError as exc:
         await update.effective_message.reply_text(str(exc))
         return
 
+    is_handle = bool(__import__("re").fullmatch(r"[A-Za-z0-9_]{1,15}", query))
+    label = f"@{query}" if is_handle else query
     await update.effective_message.reply_text(
-        f"🔎 Searching for posts about @{handle} from the last 3 hours. "
+        f"🔎 Searching verified posts matching {label} from the last 3 hours. "
         "I’ll send up to 35 results with 3 reply options each."
     )
-    context.application.create_task(_run_project_search(update, context, handle), update=update)
+    context.application.create_task(_run_project_search(update, context, query), update=update)
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
