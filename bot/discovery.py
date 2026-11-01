@@ -54,33 +54,40 @@ def _is_verified(post: Post) -> bool:
             return obj.get(key)
         return getattr(obj, key, None)
 
-    # Legacy X/twscrape `verified=True` is the old blue-check field.
-    # Newer providers expose explicit blue-check flags or a verification type.
-    boolean_fields = (
-        (_get(raw, "is_blue_verified"), True),
-        (_get(raw, "blue_verified"), True),
-        (_get(author, "is_blue_verified"), True),
-        (_get(author, "blue_verified"), True),
-        (_get(raw, "verified"), True),
-        (_get(author, "verified"), True),
-    )
-    for value, expected in boolean_fields:
-        if isinstance(value, bool) and value is expected:
-            return True
-
+    verification = (
+        author.get("verification")
+        if isinstance(author, dict)
+        else getattr(author, "verification", None)
+    ) or {}
     type_fields = (
         _get(raw, "verified_type"),
         _get(raw, "verification_type"),
         _get(author, "verified_type"),
         _get(author, "verification_type"),
-        _get((author.get("verification") if isinstance(author, dict) else getattr(author, "verification", None)) or {}, "type"),
+        _get(verification, "type"),
     )
-    for value in type_fields:
-        if isinstance(value, str) and value.strip().lower() in {"blue", "blue_verified", "blue verified"}:
-            return True
+    normalized_types = {
+        value.strip().lower()
+        for value in type_fields
+        if isinstance(value, str) and value.strip()
+    }
+    # An explicit non-blue badge always overrides legacy generic verified flags.
+    if normalized_types & {"business", "government", "gold", "gray", "grey", "organization", "unverified", "none"}:
+        return False
+    if normalized_types & {"blue", "blue_verified", "blue verified", "individual"}:
+        return True
 
-    # Do not treat generic non-empty strings or gold/gray/business labels as blue.
-    return False
+    # Legacy X/twscrape `verified=True` is the old blue-check field.
+    # Newer providers expose explicit blue-check flags.
+    boolean_fields = (
+        _get(raw, "is_blue_verified"),
+        _get(raw, "blue_verified"),
+        _get(author, "is_blue_verified"),
+        _get(author, "blue_verified"),
+        _get(raw, "verified"),
+        _get(author, "verified"),
+    )
+    return any(isinstance(value, bool) and value for value in boolean_fields)
 
 def _created_at(post: Post) -> datetime:
     raw = str(post.created_at or "").strip()
