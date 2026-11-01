@@ -15,11 +15,19 @@ from bot.reply_engine import (
 
 
 class ReplyEngineTests(unittest.TestCase):
-    def test_generation_prompt_does_not_inject_canned_phrase_bank(self):
+    def test_generation_prompt_uses_dna_reference_before_task_instructions(self):
+        self.assertIn("human reply dna reference (read this first)", SYSTEM_PROMPT.lower())
+        self.assertLess(
+            SYSTEM_PROMPT.index("HUMAN REPLY DNA REFERENCE"),
+            SYSTEM_PROMPT.index("TASK:"),
+        )
+        self.assertIn("human does not mean polished", SYSTEM_PROMPT.lower())
         self.assertIn("most specific detail", SYSTEM_PROMPT.lower())
         self.assertIn("do not use a canned phrase bank", SYSTEM_PROMPT.lower())
+        # Raw sample phrases stay out of the live prompt to reduce phrase-copying.
         self.assertNotIn("this has alpha written all over it", SYSTEM_PROMPT.lower())
         self.assertNotIn("curious to see what comes from this", SYSTEM_PROMPT.lower())
+        self.assertIn("20–100 characters", SYSTEM_PROMPT)
 
     def test_clean_reply_removes_tag_and_em_dash(self):
         self.assertEqual(
