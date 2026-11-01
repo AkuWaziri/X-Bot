@@ -248,12 +248,14 @@ def test_monitored_handle_sends_only_newest_qualifying_post():
         text="older post",
         username="alice",
         created_at="Tue Sep 08 15:10:00 +0000 2026",
+        raw={"author": {"username": "alice", "is_blue_verified": True}},
     )
     newest_post = Post(
         id="newest",
         text="newest post",
         username="alice",
         created_at="Tue Sep 08 15:20:00 +0000 2026",
+        raw={"author": {"username": "alice", "is_blue_verified": True}},
     )
 
     processed = []
@@ -275,6 +277,33 @@ def test_monitored_handle_sends_only_newest_qualifying_post():
 
     assert result == "sent"
     assert processed == ["newest"]
+def test_monitored_feed_skips_posts_without_blue_check(monkeypatch):
+    unverified = Post(
+        id="unverified",
+        text="unverified author post",
+        username="alice",
+        created_at="Tue Sep 08 15:20:00 +0000 2026",
+        raw={"author": {"username": "alice", "verified": False}},
+    )
+    processed = []
+    activity = []
+    monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
+    monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
+    monkeypatch.setattr("bot.monitor._process_post", lambda *args, **kwargs: processed.append(args[1].id) or "sent")
+
+    result = _process_handle(
+        FakeDB(),
+        FakeRecentProvider([unverified]),
+        "@alice",
+        datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc),
+        datetime(2026, 9, 8, 15, 30, tzinfo=timezone.utc),
+    )
+
+    assert result == "skipped"
+    assert processed == []
+
+
 def test_unresolved_monitored_account_is_soft_skipped(monkeypatch):
     activity = []
     monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
