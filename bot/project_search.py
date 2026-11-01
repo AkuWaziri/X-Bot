@@ -106,13 +106,26 @@ def _qualifying_post_count(posts: list[Post], cutoff: datetime, now_utc: datetim
     return len(ids)
 
 
-def _search_with_provider(provider, handle: str, limit: int) -> tuple[list[Post], bool]:
+def _search_with_provider(
+    provider,
+    handle: str,
+    limit: int,
+    *,
+    cutoff: datetime | None = None,
+    now_utc: datetime | None = None,
+) -> tuple[list[Post], bool]:
     collected: list[Post] = []
     had_success = False
     for query in _search_queries(handle):
         try:
             collected.extend(provider.search_posts(query, limit=min(max(limit, 1), 100)))
             had_success = True
+            # Stop once enough unique, in-window, non-reply posts are available.
+            # This prevents trying every fallback spelling when the first query
+            # already filled the user's result quota.
+            if cutoff is not None and now_utc is not None:
+                if _qualifying_post_count(collected, cutoff, now_utc) >= limit:
+                    break
         except Exception as exc:
             logging.warning(
                 "PROJECT SEARCH PROVIDER ERROR | provider=%s | query=%s | error=%s",
@@ -148,7 +161,7 @@ def search_project_posts(
     primary_succeeded = False
     # Request only the amount the command can display; oversized pagination can stall
     # the Telegram command while walking irrelevant older search pages.
-    searched_posts, search_succeeded = _search_with_provider(primary, query, limit)
+    searched_posts, search_succeeded = _search_with_provider(primary, query, limit, cutoff=cutoff, now_utc=now_utc)
     raw_posts.extend(searched_posts)
     primary_succeeded = primary_succeeded or search_succeeded
 
@@ -169,7 +182,7 @@ def search_project_posts(
             from bot.x.twscrape import TwscrapeProvider
 
             fallback = TwscrapeProvider()
-            fallback_posts, fallback_succeeded = _search_with_provider(fallback, query, limit)
+            fallback_posts, fallback_succeeded = _search_with_provider(fallback, query, limit, cutoff=cutoff, now_utc=now_utc)
             if not fallback_succeeded:
                 raise RuntimeError("Authenticated X session search requests failed")
             raw_posts.extend(fallback_posts)
