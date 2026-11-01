@@ -343,3 +343,17 @@ def test_fxtwitter_does_not_accept_explicit_gold_badge_as_blue():
     assert post is not None
     from bot.discovery import _is_verified
     assert not _is_verified(post)
+
+
+def test_fxtwitter_uses_created_timestamp_when_created_at_is_missing():
+    timestamp = datetime(2026, 10, 24, 19, 59, tzinfo=timezone.utc).timestamp()
+    mapped = FxTwitterProvider._to_post({
+        "type": "status",
+        "id": "timestamp-only",
+        "text": "A recent post mentioning primus_labs",
+        "author": {"screen_name": "alice"},
+        "created_timestamp": timestamp,
+    })
+    assert mapped is not None
+    assert mapped.created_at is not None
+    assert datetime.fromisoformat(mapped.created_at).astimezone(timezone.utc) == datetime(2026, 10, 24, 19, 59, tzinfo=timezone.utc)
