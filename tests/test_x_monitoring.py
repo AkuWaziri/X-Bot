@@ -6,6 +6,7 @@ os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 from bot.discovery import DISCOVERY_TOPICS
 from bot.monitor import (
     MONITORED_HANDLES_PER_RUN,
+    MAX_DISCOVERY_POSTS_PER_RUN,
     _is_recent_for_schedule,
     _last_scan_checkpoint,
     _parse_created_at,
@@ -15,6 +16,7 @@ from bot.monitor import (
     _process_handle,
     _process_post,
     _select_handles,
+    _select_rotating_topics,
     run_monitor_cycle,
 )
 from bot.x.base import Post
@@ -94,6 +96,9 @@ class IntegrationTable:
             return type("Result", (), {"data": rows[-1:]})()
         if self.name == "activity_log" and self.filters.get("event_type") == "handle_rotation":
             rows = [item for item in self.db.activities if item["event_type"] == "handle_rotation"]
+            return type("Result", (), {"data": rows[-1:]})()
+        if self.name == "activity_log" and self.filters.get("event_type") == "topic_rotation":
+            rows = [item for item in self.db.activities if item["event_type"] == "topic_rotation"]
             return type("Result", (), {"data": rows[-1:]})()
         return type("Result", (), {"data": []})()
 
@@ -199,6 +204,22 @@ def test_monitored_handles_randomly_change_between_schedules():
     assert set(first).isdisjoint(second)
     assert set(second).isdisjoint(third)
     assert len(set(first + second + third)) >= 40
+
+
+def test_topic_selection_rotates_without_repeating_previous_batch():
+    from bot.monitor import TOPICS_PER_RUN
+
+    db = IntegrationDB()
+    first = _select_rotating_topics(db)
+    second = _select_rotating_topics(db)
+    third = _select_rotating_topics(db)
+
+    assert len(first) == TOPICS_PER_RUN == 5
+    assert len(second) == TOPICS_PER_RUN
+    assert len(third) == TOPICS_PER_RUN
+    assert set(first).isdisjoint(second)
+    assert set(second).isdisjoint(third)
+    assert len(set(first + second)) == 10
 
 
 def test_monitored_handle_selection_uses_random_sample(monkeypatch):
@@ -438,7 +459,7 @@ def test_schedule_marker_is_written_only_after_successful_cycle(monkeypatch):
     assert not any(item["event_type"] == "scan_checkpoint" for item in db.activities)
 
 
-def test_discovery_uses_ten_post_target(monkeypatch):
+def test_discovery_uses_five_post_target(monkeypatch):
     accounts = [f"@integration{i}" for i in range(20)]
     db = IntegrationDB()
     captured = []
@@ -458,7 +479,7 @@ def test_discovery_uses_ten_post_target(monkeypatch):
 
     run_monitor_cycle()
 
-    assert captured == [10]
+    assert captured == [MAX_DISCOVERY_POSTS_PER_RUN] == [5]
 
 
 def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypatch):
@@ -493,8 +514,8 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     discovery_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-discovery-")]
 
     assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN
-    assert len(discovery_posts) == 10
-    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + 10
+    assert len(discovery_posts) == MAX_DISCOVERY_POSTS_PER_RUN
+    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + MAX_DISCOVERY_POSTS_PER_RUN
     assert len(saved_replies) == len(telegram_posts)
     assert any(item["event_type"] == "scan_checkpoint" for item in db.activities)
     assert not any(item["event_type"] == "error" for item in db.activities)
