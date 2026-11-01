@@ -36,12 +36,34 @@ def post(post_id, minutes_ago, now, username="alice"):
         username=username,
         created_at=(now - timedelta(minutes=minutes_ago)).isoformat(),
         url=f"https://x.com/{username}/status/{post_id}",
+        raw={"author": {"username": username, "is_blue_verified": True}},
     )
 
 
 def test_normalize_handle_accepts_at_sign_and_profile_url():
     assert normalize_handle("@primus_labs") == "primus_labs"
     assert normalize_handle("https://x.com/primus_labs/") == "primus_labs"
+
+
+
+def test_search_excludes_posts_without_a_blue_check():
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    unverified = post("unverified", 2, now)
+    unverified = Post(
+        id=unverified.id,
+        text=unverified.text,
+        username=unverified.username,
+        created_at=unverified.created_at,
+        url=unverified.url,
+        raw={"author": {"username": "alice", "verified": False}},
+    )
+    verified = post("verified", 1, now)
+    results = search_project_posts(
+        "primus_labs",
+        now=now,
+        provider=FakeProvider([unverified, verified]),
+    )
+    assert [item.id for item in results] == ["verified"]
 
 
 @pytest.mark.parametrize("value", ["", "@", "two handles", "handle!", "https://x.com/"])
