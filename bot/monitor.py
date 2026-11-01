@@ -14,9 +14,9 @@ from bot.x.twscrape import TwscrapeBlockedError
 
 logger = logging.getLogger(__name__)
 
-# Production feed allocation per scheduled run: 20 monitored handles + 10 verified topic-discovery posts.
+# Production feed allocation per scheduled run: 20 monitored handles + 5 verified topic-discovery posts.
 MONITORED_HANDLES_PER_RUN = 20
-MAX_DISCOVERY_POSTS_PER_RUN = 10
+MAX_DISCOVERY_POSTS_PER_RUN = 5
 DISCOVERY_CANDIDATE_POOL_SIZE = 30
 # Run a feed cycle every 90 minutes, around the clock.
 SCHEDULE_TIMES_UTC = (
@@ -28,6 +28,8 @@ SCHEDULE_TIMES_UTC = (
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 SCAN_CHECKPOINT_EVENT = "scan_checkpoint"
 HANDLE_ROTATION_EVENT = "handle_rotation"
+TOPIC_ROTATION_EVENT = "topic_rotation"
+TOPICS_PER_RUN = 5
 
 
 def telegram_already_sent(db, post_id: str) -> bool:
@@ -238,6 +240,50 @@ def _select_rotating_handles(db, accounts: list[str]) -> list[str]:
     )
     return selected
 
+def _last_topic_rotation_state(db) -> list[str] | None:
+    result = (
+        db.table("activity_log")
+        .select("message")
+        .eq("event_type", TOPIC_ROTATION_EVENT)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return None
+
+    message = str(result.data[0].get("message") or "")
+    for part in message.split("|"):
+        if part.startswith("selected="):
+            values = [item.strip() for item in part[9:].split(",") if item.strip()]
+            return values or None
+    return None
+
+
+def _select_rotating_topics(db) -> list[str]:
+    """Select a persistent rotating batch of discovery topics, avoiding the previous batch."""
+    from bot.discovery import DISCOVERY_TOPICS
+
+    all_topics = [topic.name for topic in DISCOVERY_TOPICS]
+    if not all_topics:
+        return []
+
+    previous = set(_last_topic_rotation_state(db) or [])
+    fresh_pool = [name for name in all_topics if name not in previous]
+    if len(fresh_pool) >= min(TOPICS_PER_RUN, len(all_topics)):
+        selected = random.sample(fresh_pool, min(TOPICS_PER_RUN, len(all_topics)))
+    else:
+        selected = list(fresh_pool)
+        remaining = [name for name in all_topics if name not in selected]
+        needed = min(TOPICS_PER_RUN - len(selected), len(remaining))
+        selected.extend(random.sample(remaining, needed))
+
+    random.shuffle(selected)
+    record_activity(db, TOPIC_ROTATION_EVENT, "SYSTEM", None, f"selected={','.join(selected)}")
+    logger.info("ROTATING TOPIC POOL | selected=%d/%d | topics=%s", len(selected), min(TOPICS_PER_RUN, len(all_topics)), ", ".join(selected))
+    return selected
+
+
 def _is_missing_account_error(exc: Exception) -> bool:
     """Return True only for a provider 404 that means the monitored account cannot be resolved."""
     return "TwitterAPIs HTTP 404:" in str(exc)
@@ -371,10 +417,12 @@ def _run_discovery(
     if max_posts <= 0:
         return 0, False
 
+    rotating_topics = _select_rotating_topics(db)
     candidates = discover_posts(
         provider,
         accounts,
         max_posts=max(DISCOVERY_CANDIDATE_POOL_SIZE, max_posts),
+        topic_names=rotating_topics,
     )
     if not candidates:
         logger.info("Discovery found no qualifying non-monitored posts.")
