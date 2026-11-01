@@ -43,6 +43,8 @@ def post(post_id, minutes_ago, now, username="alice"):
 def test_normalize_handle_accepts_at_sign_and_profile_url():
     assert normalize_handle("@primus_labs") == "primus_labs"
     assert normalize_handle("https://x.com/primus_labs/") == "primus_labs"
+    assert normalize_handle("tokenized stocks") == "tokenized stocks"
+    assert normalize_handle("  stablecoin payments  ") == "stablecoin payments"
 
 
 
@@ -66,10 +68,20 @@ def test_search_excludes_posts_without_a_blue_check():
     assert [item.id for item in results] == ["verified"]
 
 
-@pytest.mark.parametrize("value", ["", "@", "two handles", "handle!", "https://x.com/"])
+@pytest.mark.parametrize("value", ["", "@", "handle!", "https://x.com/", "!!!"])
 def test_normalize_handle_rejects_invalid_values(value):
     with pytest.raises(ValueError):
         normalize_handle(value)
+
+
+def test_free_text_search_uses_unquoted_and_phrase_queries():
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    provider = FakeProvider([post("stocks", 2, now)])
+    results = search_project_posts("tokenized stocks", now=now, provider=provider)
+    assert [item.id for item in results] == ["stocks"]
+    assert [query for query, _ in provider.queries] == [
+        "tokenized stocks", '"tokenized stocks"'
+    ]
 
 
 def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_first():
