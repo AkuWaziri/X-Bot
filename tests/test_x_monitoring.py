@@ -260,7 +260,7 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
     assert calls[0][1] == 20
 
 
-def test_monitored_handle_sends_all_qualifying_posts_newest_first(monkeypatch):
+def test_monitored_handle_sends_only_newest_qualifying_post(monkeypatch):
     older_post = Post(
         id="older",
         text="older post",
@@ -291,7 +291,7 @@ def test_monitored_handle_sends_all_qualifying_posts_newest_first(monkeypatch):
     result = _process_handle(object(), provider, "@alice", start, now)
 
     assert result == "sent"
-    assert processed == ["newest", "older"]
+    assert processed == ["newest"]
 
 def test_monitored_feed_skips_posts_without_blue_check(monkeypatch):
     unverified = Post(
