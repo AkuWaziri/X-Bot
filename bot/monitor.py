@@ -454,7 +454,7 @@ def _run_discovery(
     had_error = False
     for post, topic, score in recent:
         author = post.username.lstrip("@").lower()
-        if author in used_authors or post_seen(db, post.id):
+        if author in used_authors or (post_seen(db, post.id) and telegram_already_sent(db, post.id)):
             continue
         handle = f"@{post.username.lstrip('@')}"
         logger.info("DISCOVERY | %s | score=%d | %s", topic, score, handle)
