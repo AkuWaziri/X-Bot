@@ -260,7 +260,7 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
     assert calls[0][1] == 20
 
 
-def test_monitored_handle_sends_only_newest_qualifying_post():
+def test_monitored_handle_sends_all_qualifying_posts_newest_first(monkeypatch):
     older_post = Post(
         id="older",
         text="older post",
@@ -277,8 +277,6 @@ def test_monitored_handle_sends_only_newest_qualifying_post():
     )
 
     processed = []
-    import pytest
-    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
     monkeypatch.setattr(
@@ -291,10 +289,10 @@ def test_monitored_handle_sends_only_newest_qualifying_post():
     now = datetime(2026, 9, 8, 15, 30, tzinfo=timezone.utc)
 
     result = _process_handle(object(), provider, "@alice", start, now)
-    monkeypatch.undo()
 
     assert result == "sent"
-    assert processed == ["newest"]
+    assert processed == ["newest", "older"]
+
 def test_monitored_feed_skips_posts_without_blue_check(monkeypatch):
     unverified = Post(
         id="unverified",
