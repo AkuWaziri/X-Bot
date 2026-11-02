@@ -387,26 +387,36 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
         logger.info("NO FEED | %s | no new qualifying posts since last scan", handle)
         return "skipped"
 
-    # Exactly one feed per monitored handle: choose its newest qualifying post.
-    # This keeps the monitored allocation at 20 posts maximum per cycle.
+    # Deliver every qualifying post, newest first. Durable post/Telegram markers
+    # prevent duplicates when a scheduled run is retried after a partial failure.
     qualifying.sort(
         key=lambda item: item[1] or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
-    post, _ = qualifying[0]
-    if AUTO_REPLY:
-        result = _process_post(db, post, handle, source="monitored account", provider=provider)
-    else:
-        result = _process_post(db, post, handle, source="monitored account")
+    sent = 0
+    had_error = False
+    processed_ids = []
+    for post, _ in qualifying:
+        if AUTO_REPLY:
+            result = _process_post(db, post, handle, source="monitored account", provider=provider)
+        else:
+            result = _process_post(db, post, handle, source="monitored account")
+        processed_ids.append(f"{post.id}:{result}")
+        if result == "sent":
+            sent += 1
+        elif result == "error":
+            had_error = True
 
     logger.info(
-        "HANDLE COMPLETE | %s | qualifying=%d | selected=%s | result=%s",
+        "HANDLE COMPLETE | %s | qualifying=%d | sent=%d | posts=%s",
         handle,
         len(qualifying),
-        post.id,
-        result,
+        sent,
+        ", ".join(processed_ids),
     )
-    return result
+    if had_error:
+        return "error"
+    return "sent" if sent else "skipped"
 
 
 def _run_discovery(
