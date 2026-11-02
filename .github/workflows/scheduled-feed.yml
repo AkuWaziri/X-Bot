@@ -32,13 +32,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest
-
-      - name: Run regression tests
-        env:
-          TELEGRAM_BOT_TOKEN: "test-token"
-          X_PROVIDER_MODE: mock
-        run: pytest -q
+        run: pip install -r requirements.txt
 
       - name: Run production monitoring cycle
         env:
@@ -56,3 +50,25 @@ jobs:
           TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
           TEST_WINDOW_MINUTES: ${{ github.event_name == 'workflow_dispatch' && '300' || '10' }}
         run: python -m bot.monitor
+
+  regression-tests:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run regression tests
+        env:
+          TELEGRAM_BOT_TOKEN: "test-token"
+          X_PROVIDER_MODE: mock
+        run: pytest -q
