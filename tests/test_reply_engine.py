@@ -37,6 +37,11 @@ class ReplyEngineTests(unittest.TestCase):
         self.assertIn("game changer", SYSTEM_PROMPT.lower())
         self.assertIn("curious how...", SYSTEM_PROMPT.lower())
         self.assertIn("wow, ai account managers", SYSTEM_PROMPT.lower())
+        self.assertIn("casual personal-reaction calibration", SYSTEM_PROMPT.lower())
+        self.assertIn("ngl, an ai agent handling trades on its own is intriguing", SYSTEM_PROMPT.lower())
+        self.assertIn("setting your own risk limits keeps control in your hands", SYSTEM_PROMPT.lower())
+        self.assertIn("an nft that pays you? real utility is a big win", SYSTEM_PROMPT.lower())
+        self.assertIn("casual does not mean deliberately broken", SYSTEM_PROMPT.lower())
 
     def test_clean_reply_removes_tag_and_em_dash(self):
         self.assertEqual(
