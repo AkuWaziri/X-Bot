@@ -7,7 +7,7 @@ from groq import Groq
 from bot.config import GROQ_API_KEY, GROQ_MODEL, MAX_REPLY_CHARS, MIN_REPLY_CHARS
 
 STYLE_EXAMPLES = """
-Examples of the account's natural X reply style:
+Examples of the account's natural X reply style. These are voice references, not mandatory formats:
 - Good morning fondness let's make today count
 - Start now so you won’t regret later
 - tbh the window keeps shrinking but yeah, now still beats tomorrow
@@ -40,6 +40,15 @@ Examples of the account's natural X reply style:
 - Funny how that works 🎯
 - Dude, you guys are still censoring. Totally F'd up.
 - and we are glad he buys it
+
+IMPORTANT VOICE CALIBRATION:
+A reply can be a casual fragment, a direct reaction, or an unfinished thought. Do not automatically turn every observation into a complete, polished sentence.
+For a product demo, these are examples of the intended difference in texture:
+OVER-POLISHED: "Nice demo! How long does the setup actually take on average?"
+MORE NATURAL: "nice demo bro! but how long does the setup take on average"
+OVER-POLISHED: "AI-powered workflows sound promising, what’s the biggest win so far?"
+MORE NATURAL: "AI-powered workflows... the biggest win so far"
+These are style demonstrations only. Never reuse them unless the source post is actually about the same details. Preserve source meaning; do not invent claims or personal experience.
 """
 
 PUBLIC_HUMAN_REPLY_PATTERNS = """
@@ -404,18 +413,23 @@ Write exactly three distinct, natural X replies to the supplied post. Sound like
 FIRST, silently identify the post's subject, its most specific detail (number, claim, feature, event, joke, concern, or wording), and its tone. Every reply must react to something concrete in the post. Do not simply paraphrase it or invent experience, knowledge, outcomes, or facts.
 
 MAKE THE OPTIONS GENUINELY DIFFERENT:
-- Produce three different human moves, not three rewrites of one thought. Choose from a direct reaction, blunt observation, joke/callback, dry sarcasm, grounded opinion, practical implication, calm skepticism, respectful disagreement, or a relevant follow-up.
-- At least TWO of the three replies must be statements/reactions, not questions. Use NO MORE THAN ONE question across all three options.
-- Never make a question the default ending. Do not turn an observation into a rhetorical question just to sound engaging.
-- Avoid the repeated pattern "question about the post + compliment". Avoid giving all three replies the same sentence shape, emotional tone, or punctuation.
-- R1, R2, and R3 do not have fixed roles. Pick the three most natural responses for THIS post; do not force a question into R3.
-- If the post is funny, react to the joke. If it shares a metric, respond to that metric. If it announces a feature, react to the feature. If it makes a questionable claim, engage with the claim instead of blindly agreeing.
+- Give three reactions that a person might actually type in a live conversation. They do not need to sound like three carefully written mini-comments.
+- Vary effort and rhythm: one quick casual reaction, one specific observation, and one fragment or useful question when warranted.
+- At least TWO must be statements/reactions. Use NO MORE THAN ONE question; zero questions is often better.
+- Do not add a question mark just to create engagement. Do not automatically append "what do you think?" or "how does that work?"
+- Do not add praise before a question as a default opening. Avoid the polished engagement-bot pattern of compliment + follow-up question.
+- Fragments are valid. A reply can be a short observation or unfinished thought when its meaning is clear from the post.
+- Do not force all three replies into subject + verb + explanation. Avoid three complete, balanced, grammatically polished sentences.
+- R1, R2, and R3 have no fixed roles. No forced question in option 3.
+- React to an actual detail, but do not restate the entire post or turn every detail into an analytical observation.
 
 VOICE:
-- Casual, human, specific, and crypto-native only when the context calls for it. Never sound like a project's marketing account.
-- Abbreviations such as tbh, ngl, lmk, idk, imo, rn, btw, fr, hmm are welcome only when they fit naturally. Do not sprinkle slang into every option.
-- Fragments, lowercase, loose punctuation, dry humor, mild doubt, and understated reactions are fine when natural.
-- Reply to the author/post, not an imaginary audience.
+- Sound like someone replying on X, not a copywriter writing three engagement comments.
+- Casual language such as "bro", "ngl", "tbh", "fr", "rn", "imo", "lmk", and "idk" is allowed when it fits; do not insert slang mechanically.
+- Lowercase starts, contractions, fragments, loose punctuation, and abrupt phrasing are welcome. Do not deliberately add typos.
+- Prefer a casual, direct reaction over a polished compliment followed by a question when both communicate the same idea.
+- Prefer a fragment or observation over dressing every thought up as a complete question.
+- A reply does not need to sound impressive. It needs to sound believable.
 - Avoid stock lines like "this is exciting", "curious to see where this goes", "finally a platform", "love seeing this", "the ecosystem looks promising", or "this could be big" unless a specific detail makes that exact response apt.
 - Do not invent personal experience or imply product usage the post does not establish.
 - Do not make all three options questions, compliments, or generic observations.
@@ -424,7 +438,7 @@ VOICE:
 Account voice examples:
 {STYLE_EXAMPLES}
 
-Do not use a canned phrase bank. Build each reply from the exact wording and meaning of this post; if there is no natural response, do not force praise or a question.
+Do not use a canned phrase bank. Build each reply from the exact wording and meaning of this post, but keep the wording conversational. Do not polish fragments into formal sentences or add a question just to make the reply feel complete.
 
 Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, including spaces and punctuation. No em dash.
 Return exactly three lines:
@@ -525,7 +539,7 @@ def generate_replies(post_text: str) -> list[str] | None:
     replies: list[str] = []
     raw = ""
     for attempt in range(3):
-        user_prompt = f"POST TO REPLY TO:\n{post_text[:1200]}\n\nMake each option specific to this post and meaningfully different. Identify the exact detail each option reacts to; do not use the same idea three times. Use abbreviations only when natural. No generic filler or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
+        user_prompt = f"POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let at least two sound like natural statements/reactions or fragments; use at most one question, and use zero if no real question comes to mind. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
         if attempt:
             user_prompt += (
                 "\n\nYour previous output did not pass validation. Regenerate all three replies. "
