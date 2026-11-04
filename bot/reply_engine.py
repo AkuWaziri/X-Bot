@@ -53,6 +53,15 @@ MORE NATURAL: "wow, AI account managers for every customer. this is the future."
 OVER-POLISHED: "Curious how they’ll handle privacy with so many AI agents."
 MORE NATURAL: "i hope they handle privacy more efficiently with so many AI agents."
 The point is not to copy these lines. The point is to express a direct personal reaction, opinion, hope, concern, or observation in plain conversational language. Do not inflate a reaction into marketing praise ("game changer", "revolutionary", "promising") or turn a concern into a polished engagement question ("curious how...") when a plain statement sounds more human. A reply may say what the author thinks or hopes, but must not invent personal experience, factual certainty, or unsupported claims. Preserve source meaning.
+
+CASUAL PERSONAL-REACTION CALIBRATION:
+OVER-POLISHED: "AI agent actually handling trades? That's a game-changer."
+MORE NATURAL: "ngl, an AI agent handling trades on its own is intriguing."
+OVER-POLISHED: "Setting risk limits yourself? Nice to keep control in your hands."
+MORE NATURAL: "setting your own risk limits keeps control in your hands."
+OVER-POLISHED: "NFT that pays you? Real utility is the biggest win."
+MORE NATURAL: "an NFT that pays you? real utility is a big win."
+Use this kind of plain, personal, slightly loose phrasing when it fits the post. "ngl" and similar openers are optional, not mandatory. Do not copy these examples unless the source post is actually about the same details. Prefer a genuine reaction ("this part is intriguing", "i like that...", "i hope...", "that keeps control...") over generic praise or polished marketing language. Keep grammar natural; casual does not mean deliberately broken.
 """
 
 PUBLIC_HUMAN_REPLY_PATTERNS = """
@@ -432,6 +441,8 @@ VOICE:
 - Casual language such as "bro", "ngl", "tbh", "fr", "rn", "imo", "lmk", and "idk" is allowed when it fits; do not insert slang mechanically.
 - Lowercase starts, contractions, fragments, loose punctuation, and abrupt phrasing are welcome. Do not deliberately add typos.
 - Prefer a casual, direct reaction or personal stance over polished commentary. State what you think, like, doubt, hope, or worry about in plain words when the post invites it.
+- Use natural personal openers such as "ngl", "tbh", or "imo" when they genuinely fit; they should sound like the author's spontaneous reaction, not a required decoration.
+- Prefer everyday wording such as "this is intriguing", "keeps control in your hands", or "a big win" over inflated labels like "game-changer" or "the biggest win". Keep grammar natural while allowing casual fragments and loose punctuation.
 - Avoid default promotional labels such as "game changer", "incredible innovation", "promising", and "exciting" unless the wording genuinely fits and adds something specific.
 - Avoid "curious how..." as a substitute for a real opinion or concern. If the post raises a concern, express the concern directly; if it inspires hope, say what you hope happens.
 - Prefer a fragment or observation over dressing every thought up as a complete question.
@@ -545,7 +556,7 @@ def generate_replies(post_text: str) -> list[str] | None:
     replies: list[str] = []
     raw = ""
     for attempt in range(3):
-        user_prompt = f"POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use at most one question, and use zero if no real question comes to mind. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
+        user_prompt = f"POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Use a spontaneous personal voice when it fits (for example, a natural "ngl" or "tbh" opener), and prefer everyday wording over polished marketing labels like "game-changer" or "the biggest win". Keep grammar natural but do not over-polish the wording. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use at most one question, and use zero if no real question comes to mind. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
         if attempt:
             user_prompt += (
                 "\n\nYour previous output did not pass validation. Regenerate all three replies. "
