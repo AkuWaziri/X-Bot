@@ -28,6 +28,11 @@ class ReplyEngineTests(unittest.TestCase):
         self.assertNotIn("this has alpha written all over it", SYSTEM_PROMPT.lower())
         self.assertNotIn("curious to see what comes from this", SYSTEM_PROMPT.lower())
         self.assertIn("20-100 characters", SYSTEM_PROMPT)
+        self.assertIn("casual fragment", SYSTEM_PROMPT.lower())
+        self.assertIn("zero questions is often better", SYSTEM_PROMPT.lower())
+        self.assertIn("copywriter writing three engagement comments", SYSTEM_PROMPT.lower())
+        self.assertIn("nice demo bro!", SYSTEM_PROMPT.lower())
+        self.assertIn("ai-powered workflows...", SYSTEM_PROMPT.lower())
 
     def test_clean_reply_removes_tag_and_em_dash(self):
         self.assertEqual(
