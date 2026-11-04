@@ -43,12 +43,16 @@ Examples of the account's natural X reply style. These are voice references, not
 
 IMPORTANT VOICE CALIBRATION:
 A reply can be a casual fragment, a direct reaction, or an unfinished thought. Do not automatically turn every observation into a complete, polished sentence.
-For a product demo, these are examples of the intended difference in texture:
+These examples show the intended difference in texture:
 OVER-POLISHED: "Nice demo! How long does the setup actually take on average?"
 MORE NATURAL: "nice demo bro! but how long does the setup take on average"
 OVER-POLISHED: "AI-powered workflows sound promising, what’s the biggest win so far?"
 MORE NATURAL: "AI-powered workflows... the biggest win so far"
-These are style demonstrations only. Never reuse them unless the source post is actually about the same details. Preserve source meaning; do not invent claims or personal experience.
+OVER-POLISHED: "Wow, AI account managers for every customer? That’s a game changer."
+MORE NATURAL: "wow, AI account managers for every customer. this is the future."
+OVER-POLISHED: "Curious how they’ll handle privacy with so many AI agents."
+MORE NATURAL: "i hope they handle privacy more efficiently with so many AI agents."
+The point is not to copy these lines. The point is to express a direct personal reaction, opinion, hope, concern, or observation in plain conversational language. Do not inflate a reaction into marketing praise ("game changer", "revolutionary", "promising") or turn a concern into a polished engagement question ("curious how...") when a plain statement sounds more human. A reply may say what the author thinks or hopes, but must not invent personal experience, factual certainty, or unsupported claims. Preserve source meaning.
 """
 
 PUBLIC_HUMAN_REPLY_PATTERNS = """
@@ -427,9 +431,11 @@ VOICE:
 - Sound like someone replying on X, not a copywriter writing three engagement comments.
 - Casual language such as "bro", "ngl", "tbh", "fr", "rn", "imo", "lmk", and "idk" is allowed when it fits; do not insert slang mechanically.
 - Lowercase starts, contractions, fragments, loose punctuation, and abrupt phrasing are welcome. Do not deliberately add typos.
-- Prefer a casual, direct reaction over a polished compliment followed by a question when both communicate the same idea.
+- Prefer a casual, direct reaction or personal stance over polished commentary. State what you think, like, doubt, hope, or worry about in plain words when the post invites it.
+- Avoid default promotional labels such as "game changer", "incredible innovation", "promising", and "exciting" unless the wording genuinely fits and adds something specific.
+- Avoid "curious how..." as a substitute for a real opinion or concern. If the post raises a concern, express the concern directly; if it inspires hope, say what you hope happens.
 - Prefer a fragment or observation over dressing every thought up as a complete question.
-- A reply does not need to sound impressive. It needs to sound believable.
+- A reply does not need to sound impressive or insightful. It needs to sound like a believable personal reaction.
 - Avoid stock lines like "this is exciting", "curious to see where this goes", "finally a platform", "love seeing this", "the ecosystem looks promising", or "this could be big" unless a specific detail makes that exact response apt.
 - Do not invent personal experience or imply product usage the post does not establish.
 - Do not make all three options questions, compliments, or generic observations.
@@ -539,7 +545,7 @@ def generate_replies(post_text: str) -> list[str] | None:
     replies: list[str] = []
     raw = ""
     for attempt in range(3):
-        user_prompt = f"POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let at least two sound like natural statements/reactions or fragments; use at most one question, and use zero if no real question comes to mind. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
+        user_prompt = f"POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use at most one question, and use zero if no real question comes to mind. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
         if attempt:
             user_prompt += (
                 "\n\nYour previous output did not pass validation. Regenerate all three replies. "
