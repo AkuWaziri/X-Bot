@@ -110,3 +110,21 @@ def record_activity(db: Client, event_type: str, handle: str, post_id: str | Non
             "message": message,
         }
     ).execute()
+
+
+def project_post_sent(db: Client, post_id: str) -> bool:
+    """Return True when this X post has already been delivered by any /project query."""
+    result = (
+        db.table("activity_log")
+        .select("id")
+        .eq("event_type", "project_post_sent")
+        .eq("post_id", str(post_id))
+        .limit(1)
+        .execute()
+    )
+    return bool(result.data)
+
+
+def mark_project_post_sent(db: Client, post_id: str, handle: str, query: str) -> None:
+    """Persist global /project delivery history, independent of the search query."""
+    record_activity(db, "project_post_sent", handle, str(post_id), f"Delivered by /project query: {query}")
