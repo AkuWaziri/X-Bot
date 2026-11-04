@@ -13,6 +13,8 @@ from bot.db import (
     mark_reply_rejected,
     mark_reply_selected,
     mark_reply_pending,
+    project_post_sent,
+    mark_project_post_sent,
     record_activity,
     save_pending_replies,
 )
@@ -254,6 +256,31 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as exc:
         logging.warning("PROJECT SEARCH DB INIT FAILED | error=%s", str(exc)[:200])
 
+    # Deduplicate by X post ID globally, never by the search query.
+    if db is None:
+        await context.bot.send_message(chat_id=chat_id, text="❌ Project results were found, but delivery history is unavailable. No posts were sent to avoid duplicate feeds.")
+        return
+
+    fresh_posts = []
+    for post in posts:
+        try:
+            already_sent = await asyncio.to_thread(project_post_sent, db, str(post.id))
+        except Exception as exc:
+            logging.warning("PROJECT DELIVERY HISTORY LOOKUP FAILED | post_id=%s | error=%s", post.id, str(exc)[:200])
+            await context.bot.send_message(chat_id=chat_id, text="❌ Project delivery history could not be checked. No posts were sent to avoid duplicate feeds.")
+            return
+        if already_sent:
+            logging.info("PROJECT POST SKIPPED AS ALREADY DELIVERED | query=%s | post_id=%s", query, post.id)
+            continue
+        fresh_posts.append(post)
+
+    if not fresh_posts:
+        await context.bot.send_message(chat_id=chat_id, text=f"🔎 No new posts for {label}. Matching posts were already sent by earlier /project searches.")
+        return
+
+    posts = fresh_posts
+    await context.bot.send_message(chat_id=chat_id, text=f"🔎 {len(posts)} new post(s) for {label}; previously delivered posts were skipped.")
+
     for index, post in enumerate(posts, start=1):
         replies = None
         allow_buttons = False
@@ -355,6 +382,11 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
             text=entry[:4096],
             reply_markup=reply_markup,
         )
+        try:
+            await asyncio.to_thread(mark_project_post_sent, db, str(post.id), f"@{post.username.lstrip('@')}", query)
+        except Exception as exc:
+            logging.exception("PROJECT DELIVERY HISTORY SAVE FAILED | post_id=%s | error=%s", post.id, str(exc)[:200])
+            await context.bot.send_message(chat_id=chat_id, text="⚠️ This post was delivered, but its duplicate-prevention record could not be saved. Check Supabase before running another /project search.")
         # Keep Telegram's per-chat message rate comfortably below its limit.
         if index < len(posts):
             await asyncio.sleep(1.1)
