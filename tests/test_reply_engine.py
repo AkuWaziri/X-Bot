@@ -42,6 +42,8 @@ class ReplyEngineTests(unittest.TestCase):
         self.assertIn("setting your own risk limits keeps control in your hands", SYSTEM_PROMPT.lower())
         self.assertIn("an nft that pays you? real utility is a big win", SYSTEM_PROMPT.lower())
         self.assertIn("casual does not mean deliberately broken", SYSTEM_PROMPT.lower())
+        self.assertIn("question mark must be the final character", SYSTEM_PROMPT.lower())
+        self.assertIn("zero questions is preferred", SYSTEM_PROMPT.lower())
 
     def test_clean_reply_removes_tag_and_em_dash(self):
         self.assertEqual(
@@ -72,6 +74,31 @@ R3: curious where this goes once more people try it"""
 
     def test_short_reply_is_rejected(self):
         self.assertFalse(validate_reply("lol"))
+
+    def test_question_mark_must_be_at_end(self):
+        self.assertFalse(validate_reply("is this live? the rollout looks useful"))
+        self.assertTrue(validate_reply("the rollout looks useful, is this live?"))
+
+    def test_disliked_filler_phrases_are_rejected(self):
+        for reply in (
+            "this actually gives users a useful option",
+            "feels like a strong move for builders",
+            "this feels off compared with the last update",
+            "this or that could work for the rollout",
+        ):
+            self.assertFalse(validate_reply(reply))
+
+    def test_reply_set_allows_at_most_one_question(self):
+        self.assertTrue(validate_replies([
+            "the wallet flow is the detail i noticed first",
+            "good to see the rollout reaching more users",
+            "does this support other networks yet?",
+        ]))
+        self.assertFalse(validate_replies([
+            "does this support other networks yet?",
+            "is the rollout live for everyone now?",
+            "the wallet flow is the detail i noticed first",
+        ]))
 
     def test_generic_reply_is_rejected(self):
         self.assertFalse(validate_reply("Great post"))
