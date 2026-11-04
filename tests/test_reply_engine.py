@@ -33,6 +33,10 @@ class ReplyEngineTests(unittest.TestCase):
         self.assertIn("copywriter writing three engagement comments", SYSTEM_PROMPT.lower())
         self.assertIn("nice demo bro!", SYSTEM_PROMPT.lower())
         self.assertIn("ai-powered workflows...", SYSTEM_PROMPT.lower())
+        self.assertIn("personal reaction, opinion, hope, concern", SYSTEM_PROMPT.lower())
+        self.assertIn("game changer", SYSTEM_PROMPT.lower())
+        self.assertIn("curious how...", SYSTEM_PROMPT.lower())
+        self.assertIn("wow, ai account managers", SYSTEM_PROMPT.lower())
 
     def test_clean_reply_removes_tag_and_em_dash(self):
         self.assertEqual(
