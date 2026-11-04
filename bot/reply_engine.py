@@ -428,8 +428,10 @@ FIRST, silently identify the post's subject, its most specific detail (number, c
 MAKE THE OPTIONS GENUINELY DIFFERENT:
 - Give three reactions that a person might actually type in a live conversation. They do not need to sound like three carefully written mini-comments.
 - Vary effort and rhythm: one quick casual reaction, one specific observation, and one fragment or useful question when warranted.
-- At least TWO must be statements/reactions. Use NO MORE THAN ONE question; zero questions is often better.
-- Do not add a question mark just to create engagement. Do not automatically append "what do you think?" or "how does that work?"
+- At least TWO must be statements/reactions. Use NO MORE THAN ONE question across all three options; zero questions is preferred.
+- Do not add a question mark just to create engagement. Most reply sets should contain no questions.
+- Never put a question mark in the middle of a sentence. If a reply is a question, its question mark must be the final character.
+- Avoid the words/phrases "actually", "feels like", "feels off", and "this or that" in generated replies. Choose direct, concrete wording instead. Do not automatically append "what do you think?" or "how does that work?"
 - Do not add praise before a question as a default opening. Avoid the polished engagement-bot pattern of compliment + follow-up question.
 - Fragments are valid. A reply can be a short observation or unfinished thought when its meaning is clear from the post.
 - Do not force all three replies into subject + verb + explanation. Avoid three complete, balanced, grammatically polished sentences.
@@ -496,6 +498,12 @@ def _valid_reply(reply: str) -> bool:
         return False
     if "—" in reply:
         return False
+    # Questions are allowed sparingly, but the question mark must close the reply.
+    if "?" in reply and not reply.rstrip().endswith("?"):
+        return False
+    # Block recurring filler and vague contrast patterns the user dislikes.
+    if re.search(r"\\bactually\\b|\\bfeels\\s+like\\b|\\bfeels\\s+off\\b|\\bthis\\s+or\\s+that\\b", reply, re.IGNORECASE):
+        return False
     return True
 
 
@@ -556,7 +564,7 @@ def generate_replies(post_text: str) -> list[str] | None:
     replies: list[str] = []
     raw = ""
     for attempt in range(3):
-        user_prompt = f"POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Use a spontaneous personal voice when it fits (for example, a natural "ngl" or "tbh" opener), and prefer everyday wording over polished marketing labels like "game-changer" or "the biggest win". Keep grammar natural but do not over-polish the wording. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use at most one question, and use zero if no real question comes to mind. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
+        user_prompt = f"POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Use a spontaneous personal voice when it fits (for example, a natural "ngl" or "tbh" opener), and prefer everyday wording over polished marketing labels like "game-changer" or "the biggest win". Keep grammar natural but do not over-polish the wording. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use no more than one question across all three, and prefer zero. Any question mark must be the final character of its reply. Avoid "actually", "feels like", "feels off", and "this or that" in the generated wording. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."
         if attempt:
             user_prompt += (
                 "\n\nYour previous output did not pass validation. Regenerate all three replies. "
@@ -590,16 +598,20 @@ def generate_replies(post_text: str) -> list[str] | None:
                 [len(reply) for reply in replies],
                 raw[:500],
             )
-        if len(replies) == 3:
+        if len(replies) == 3 and validate_replies(replies):
             break
 
-    if len(replies) != 3:
-        raise RuntimeError(f"Groq returned {len(replies)} valid replies instead of 3 after 3 attempts")
+    if not validate_replies(replies):
+        raise RuntimeError(f"Groq returned replies that failed style validation after 3 attempts")
 
     # Final hard guard. This catches anything introduced by future prompt/model
     # changes before a suggestion is stored or sent to Telegram.
     if any("—" in reply for reply in replies):
         raise RuntimeError("Groq returned an em dash in a reply")
+    if sum("?" in reply for reply in replies) > 1:
+        raise RuntimeError("Groq returned more than one question across the three replies")
+    if any("?" in reply and not reply.rstrip().endswith("?") for reply in replies):
+        raise RuntimeError("Groq returned a question mark before the end of a reply")
 
     return replies
 
@@ -607,7 +619,9 @@ def generate_replies(post_text: str) -> list[str] | None:
 def validate_replies(replies: list[str] | None) -> bool:
     if not replies or len(replies) != 3:
         return False
-    return all(_valid_reply(reply) for reply in replies) and len(set(replies)) == 3
+    if not all(_valid_reply(reply) for reply in replies) or len(set(replies)) != 3:
+        return False
+    return sum("?" in reply for reply in replies) <= 1
 
 
 def validate_reply(reply: str | None) -> bool:
