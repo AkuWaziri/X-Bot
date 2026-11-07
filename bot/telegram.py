@@ -412,8 +412,7 @@ async def project(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # A bare single word is a text search. Only an explicitly supplied
     # @handle should be displayed as an account mention.
-    is_handle = query.startswith("@")
-    label = query if is_handle else query
+    label = query
     await update.effective_message.reply_text(
         f"🔎 Searching posts matching {label} from the last 3 hours. "
         "I’ll send up to 35 results with 3 reply options each."
