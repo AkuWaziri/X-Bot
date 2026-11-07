@@ -428,7 +428,7 @@ FIRST, silently identify the post's subject, its most specific detail (number, c
 MAKE THE OPTIONS GENUINELY DIFFERENT:
 - Give three reactions that a person might actually type in a live conversation. They do not need to sound like three carefully written mini-comments.
 - Vary effort and rhythm: one quick casual reaction, one specific observation, and one fragment or useful question when warranted.
-- At least TWO must be statements/reactions. Use NO MORE THAN ONE question across all three options; zero questions is preferred.
+- At least TWO must be statements/reactions. Use NO MORE THAN ONE question across all three options; zero questions is preferred, and zero questions is often better.
 - Do not add a question mark just to create engagement. Most reply sets should contain no questions.
 - Never put a question mark in the middle of a sentence. If a reply is a question, its question mark must be the final character.
 - Avoid the words/phrases "actually", "feels like", "feels off", and "this or that" in generated replies. Choose direct, concrete wording instead. Do not automatically append "what do you think?" or "how does that work?"
@@ -502,7 +502,7 @@ def _valid_reply(reply: str) -> bool:
     if "?" in reply and not reply.rstrip().endswith("?"):
         return False
     # Block recurring filler and vague contrast patterns the user dislikes.
-    if re.search(r"\\bactually\\b|\\bfeels\\s+like\\b|\\bfeels\\s+off\\b|\\bthis\\s+or\\s+that\\b", reply, re.IGNORECASE):
+    if re.search(r"\bactually\b|\bfeels\s+like\b|\bfeels\s+off\b|\bthis\s+or\s+that\b", reply, re.IGNORECASE):
         return False
     return True
 
