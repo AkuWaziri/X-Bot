@@ -66,6 +66,11 @@ def _search_queries(query: str) -> tuple[str, ...]:
         if len(stem) >= 3:
             variants.extend([stem, f'"{stem}"'])
         return tuple(dict.fromkeys(variants))
+    # Quoting a single token (including an underscore handle-like term) adds
+    # no useful phrase constraint and doubles provider latency. Keep both
+    # variants for actual multi-word phrases.
+    if not re.search(r"\\s", phrase):
+        return (phrase,)
     return (phrase, f'"{phrase}"')
 
 
@@ -204,9 +209,10 @@ def search_project_posts(
             from bot.x.twscrape import TwscrapeProvider
 
             fallback = TwscrapeProvider()
-            fallback_posts, fallback_succeeded = _search_with_provider(fallback, query, limit, cutoff=cutoff, now_utc=now_utc)
-            if not fallback_succeeded:
-                raise RuntimeError("Authenticated X session search requests failed")
+            # One authenticated request is enough to supplement an incomplete
+            # public result set. Repeating quoted variants here can double the
+            # wait on X's session search without adding useful coverage.
+            fallback_posts = fallback.search_posts(query, limit=min(max(limit, 1), 100))
             raw_posts.extend(fallback_posts)
             primary_succeeded = True
         except Exception as exc:
