@@ -1,9 +1,16 @@
 import asyncio
+import threading
 from typing import Any
 
 from bot.config import TWITTERAPIS_CT0, TWITTERAPIS_X_AUTH_TOKEN
 from bot.x.base import Post, XProvider
 
+
+
+# twscrape persists its authenticated account in a shared SQLite pool. Avoid
+# concurrent search calls racing while adding/reusing the same session.
+_SEARCH_LOCK = threading.Lock()
+_SEARCH_LOCK_WAIT_SECONDS = 35
 
 
 class TwscrapeBlockedError(RuntimeError):
@@ -113,7 +120,12 @@ class TwscrapeProvider(XProvider):
         from twscrape import API, gather
 
         api = API()
-        await api.pool.add_account_cookies("xbot_session", self._cookies())
+        # Account-pool setup can also stall on SQLite contention, so bound it
+        # separately rather than timing only the network search.
+        await asyncio.wait_for(
+            api.pool.add_account_cookies("xbot_session", self._cookies()),
+            timeout=10,
+        )
 
         tweets = await asyncio.wait_for(
             gather(api.search(query, limit=max(limit, 20))),
@@ -145,10 +157,17 @@ class TwscrapeProvider(XProvider):
             raise RuntimeError(f"Twscrape provider failed: {exc}") from exc
 
     def search_posts(self, query: str, limit: int = 20) -> list[Post]:
+        acquired = _SEARCH_LOCK.acquire(timeout=_SEARCH_LOCK_WAIT_SECONDS)
+        if not acquired:
+            raise RuntimeError(
+                "Another authenticated X search is still using the session; retry shortly"
+            )
         try:
             return asyncio.run(self._search(query, limit))
         except Exception as exc:
             raise RuntimeError(f"Twscrape provider failed: {exc}") from exc
+        finally:
+            _SEARCH_LOCK.release()
 
     async def _create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
         from curl_cffi import requests as curl_requests
