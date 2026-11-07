@@ -40,6 +40,16 @@ def post(post_id, minutes_ago, now, username="alice"):
     )
 
 
+
+
+def test_bare_handle_like_word_is_a_text_query_not_an_account_query():
+    from bot.project_search import _search_queries, _is_handle_query
+
+    assert normalize_handle("Primus_labs") == "Primus_labs"
+    assert _is_handle_query("Primus_labs") is False
+    assert _search_queries("Primus_labs") == ("Primus_labs",)
+    assert _is_handle_query("@Primus_labs") is True
+
 def test_normalize_handle_accepts_at_sign_and_profile_url():
     assert normalize_handle("@primus_labs") == "@primus_labs"
     assert normalize_handle("https://x.com/primus_labs/") == "@primus_labs"
@@ -116,7 +126,7 @@ def test_single_word_query_searches_broad_keyword_and_handle_variants():
     results = search_project_posts("security", now=now, provider=provider)
 
     assert [item.id for item in results] == ["security"]
-    assert [query for query, _ in provider.queries] == ["security", '"security"']
+    assert [query for query, _ in provider.queries] == ["security"]
 
 
 def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_first():
