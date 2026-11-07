@@ -69,7 +69,7 @@ def _search_queries(query: str) -> tuple[str, ...]:
     # Quoting a single token (including an underscore handle-like term) adds
     # no useful phrase constraint and doubles provider latency. Keep both
     # variants for actual multi-word phrases.
-    if not re.search(r"\\s", phrase):
+    if not re.search(r"\s", phrase):
         return (phrase,)
     return (phrase, f'"{phrase}"')
 
