@@ -2,15 +2,13 @@ name: X-Bot Scheduled Feed
 
 on:
   workflow_dispatch:
-  # Feed every 90 minutes, with two retries for GitHub schedule delays.
+  # WAT feed slots: 12:00, 17:00 and 21:00 (UTC: 11:00, 16:00 and 20:00).
+  # Two short retries help recover from GitHub Actions schedule delays.
   # The monitor records completed slots and ignores duplicate retries.
   schedule:
-    - cron: "3 0,3,6,9,12,15,18,21 * * *"
-    - cron: "10 0,3,6,9,12,15,18,21 * * *"
-    - cron: "18 0,3,6,9,12,15,18,21 * * *"
-    - cron: "33 1,4,7,10,13,16,19,22 * * *"
-    - cron: "40 1,4,7,10,13,16,19,22 * * *"
-    - cron: "48 1,4,7,10,13,16,19,22 * * *"
+    - cron: "0 11,16,20 * * *"
+    - cron: "7 11,16,20 * * *"
+    - cron: "15 11,16,20 * * *"
 
 concurrency:
   group: x-bot-scheduler
