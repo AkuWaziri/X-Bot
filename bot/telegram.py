@@ -207,11 +207,11 @@ def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
 async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
     chat_id = update.effective_chat.id
     label = query
-    logging.info("PROJECT SEARCH STARTED | query=%s | window_minutes=180 | limit=35", query)
+    logging.info("PROJECT SEARCH STARTED | query=%s | window_minutes=180 | limit=100", query)
     try:
         # Bound the user-facing wait even if a provider/library stalls unexpectedly.
         posts = await asyncio.wait_for(
-            asyncio.to_thread(search_project_posts, query, limit=35, window_minutes=180),
+            asyncio.to_thread(search_project_posts, query, limit=100, window_minutes=180),
             timeout=90,
         )
     except asyncio.TimeoutError:
@@ -415,7 +415,7 @@ async def project(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     label = query
     await update.effective_message.reply_text(
         f"🔎 Searching posts matching {label} from the last 3 hours. "
-        "I’ll send up to 35 results with 3 reply options each."
+        "I’ll send up to 100 results with 3 reply options each."
     )
     context.application.create_task(_run_project_search(update, context, query), update=update)
 
