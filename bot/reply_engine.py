@@ -1,5 +1,7 @@
 import logging
 import re
+import threading
+import time
 from pathlib import Path
 
 from groq import Groq
@@ -410,6 +412,38 @@ def _load_reply_dna_reference() -> str:
     return document[section_start:].strip()
 
 
+# Groq is shared by /project and the scheduled-feed worker in this process.
+# Serialize calls and leave room under TPM limits instead of bursting requests.
+_GROQ_REQUEST_LOCK = threading.Lock()
+_GROQ_MIN_INTERVAL_SECONDS = 6.0
+_GROQ_LAST_REQUEST_AT = 0.0
+
+
+def _create_groq_completion(client, **kwargs):
+    global _GROQ_LAST_REQUEST_AT
+    with _GROQ_REQUEST_LOCK:
+        wait_for = _GROQ_MIN_INTERVAL_SECONDS - (time.monotonic() - _GROQ_LAST_REQUEST_AT)
+        if wait_for > 0:
+            time.sleep(wait_for)
+        try:
+            response = client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            status = getattr(exc, "status_code", None)
+            if status != 429 and "429" not in str(exc):
+                raise
+            headers = getattr(getattr(exc, "response", None), "headers", {}) or {}
+            retry_after = headers.get("retry-after") or headers.get("Retry-After")
+            try:
+                delay = min(max(float(retry_after), 1.0), 60.0) if retry_after else 20.0
+            except (TypeError, ValueError):
+                delay = 20.0
+            time.sleep(delay)
+            response = client.chat.completions.create(**kwargs)
+        finally:
+            _GROQ_LAST_REQUEST_AT = time.monotonic()
+        return response
+
+
 REPLY_DNA_REFERENCE = _load_reply_dna_reference()
 # Keep the large phrase bank out of the live prompt. It is retained above as
 # documentation/reference material, but feeding every sample to the model
@@ -572,7 +606,7 @@ def generate_replies(post_text: str) -> list[str] | None:
                 "R1: [reply]\nR2: [reply]\nR3: [reply]"
             )
         try:
-            completion = client.chat.completions.create(
+            completion = _create_groq_completion(
                 model=GROQ_MODEL,
                 temperature=1.0,
                 max_completion_tokens=1024,
