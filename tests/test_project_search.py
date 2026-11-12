@@ -188,7 +188,7 @@ def test_search_caps_results_at_100():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FakeProvider([post(str(i), i, now) for i in range(120)])
 
-    results = search_project_posts("some_project", limit=99, now=now, provider=provider)
+    results = search_project_posts("some_project", limit=999, now=now, provider=provider)
 
     assert len(results) == 100
 
