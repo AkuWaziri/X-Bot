@@ -16,6 +16,9 @@ _SEARCH_LOCK_WAIT_SECONDS = 35
 class TwscrapeBlockedError(RuntimeError):
     """Raised when X blocks the twscrape session and the cycle must stop immediately."""
 
+class XReplyTargetUnavailableError(RuntimeError):
+    """Raised when X permanently disallows replying to a specific target post."""
+
 
 class TwscrapeProvider(XProvider):
     """Free X read provider using an authenticated X session via twscrape."""
@@ -245,6 +248,14 @@ class TwscrapeProvider(XProvider):
         reply_id = str(result.get("rest_id") or "").strip()
         if not reply_id:
             errors = data.get("errors") or []
+            for error in errors:
+                code = str(error.get("code") or "")
+                message = str(error.get("message") or "")
+                if code == "461" or "outdated tweet" in message.lower():
+                    raise XReplyTargetUnavailableError(
+                        "X does not permit replies to this outdated post (461). "
+                        "This target cannot be replied to; choose a newer post."
+                    )
             raise RuntimeError(
                 "X reply publishing returned no tweet id: "
                 f"{data}; errors={errors}"
