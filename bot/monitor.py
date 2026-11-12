@@ -345,7 +345,7 @@ def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
         replies = None
 
     auto_reply_text = None
-    if AUTO_REPLY:
+    if AUTO_REPLY and replies:
         state, posted_text = _latest_auto_reply_state(db, post.id)
         if state == "auto_reply_posted":
             auto_reply_text = posted_text
@@ -367,7 +367,7 @@ def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
             except Exception as exc:
                 logger.exception("Automatic reply failed for %s", post.id)
                 record_activity(db, "auto_reply_error", handle, post.id, str(exc)[:500])
-    else:
+    elif not AUTO_REPLY and replies:
         save_pending_replies(db, post.id, handle, post.text, replies)
 
     try:
