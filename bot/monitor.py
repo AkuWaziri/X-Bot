@@ -27,6 +27,7 @@ SCHEDULE_TIMES_UTC = (
 )
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 SCAN_CHECKPOINT_EVENT = "scan_checkpoint"
+HANDLE_SCAN_CHECKPOINT_EVENT = "handle_scan_checkpoint"
 HANDLE_ROTATION_EVENT = "handle_rotation"
 TOPIC_ROTATION_EVENT = "topic_rotation"
 TOPICS_PER_RUN = 5
@@ -97,6 +98,34 @@ def _last_scan_checkpoint(db) -> datetime | None:
 
 def _mark_scan_checkpoint(db, scan_at: datetime) -> None:
     record_activity(db, SCAN_CHECKPOINT_EVENT, "SYSTEM", None, f"scan={scan_at.astimezone(timezone.utc).isoformat()}")
+
+
+def _last_handle_scan_checkpoint(db, handle: str) -> datetime | None:
+    result = (
+        db.table("activity_log")
+        .select("message")
+        .eq("event_type", HANDLE_SCAN_CHECKPOINT_EVENT)
+        .eq("handle", handle)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return None
+    message = str(result.data[0].get("message") or "")
+    if not message.startswith("scan="):
+        return None
+    return _parse_created_at(message[5:])
+
+
+def _mark_handle_scan_checkpoint(db, handle: str, scan_at: datetime) -> None:
+    record_activity(
+        db,
+        HANDLE_SCAN_CHECKPOINT_EVENT,
+        handle,
+        None,
+        f"scan={scan_at.astimezone(timezone.utc).isoformat()}",
+    )
 
 
 def _schedule_start(now: datetime) -> datetime:
@@ -528,11 +557,23 @@ def run_monitor_cycle() -> None:
 
     for handle in rotating_handles:
         try:
+            handle_checkpoint = _last_handle_scan_checkpoint(db, handle)
+            if handle_checkpoint is not None:
+                handle_scan_start = handle_checkpoint
+            elif test_mode:
+                handle_scan_start = scan_start
+            else:
+                # A rotating handle may go several hours between checks. Its
+                # first per-handle checkpoint backfills one complete rotation.
+                handle_scan_start = now - timedelta(hours=12)
+
             handle_sent_counts: list[int] = []
             result = _process_handle(
-                db, provider, handle, scan_start, now, sent_counter=handle_sent_counts
+                db, provider, handle, handle_scan_start, now, sent_counter=handle_sent_counts
             )
             monitored_sent += handle_sent_counts[0] if handle_sent_counts else 0
+            if result != "error":
+                _mark_handle_scan_checkpoint(db, handle, now)
         except TwscrapeBlockedError as exc:
             logger.error("X PROVIDER BLOCKED | stopping cycle immediately: %s", exc)
             record_activity(db, "x_provider_blocked", handle, None, str(exc)[:500])
