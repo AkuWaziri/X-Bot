@@ -624,12 +624,22 @@ def _parse_replies(raw: str) -> list[str]:
             replies.append(cleaned)
     return replies
 
-def generate_replies(post_text: str) -> list[str] | None:
+def generate_replies(
+    post_text: str,
+    *,
+    request_timeout: float | None = None,
+    max_retries: int | None = None,
+) -> list[str] | None:
     """Generate three distinct human-style reply suggestions, or None."""
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is not configured")
 
-    client = Groq(api_key=GROQ_API_KEY)
+    client_options = {"api_key": GROQ_API_KEY}
+    if request_timeout is not None:
+        client_options["timeout"] = request_timeout
+    if max_retries is not None:
+        client_options["max_retries"] = max_retries
+    client = Groq(**client_options)
 
     replies: list[str] = []
     raw = ""
