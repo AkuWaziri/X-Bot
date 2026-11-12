@@ -112,20 +112,22 @@ def _is_reply_post(post: Post) -> bool:
 
 def _qualifying_post_count(posts: list[Post], cutoff: datetime, now_utc: datetime, query: str | None = None) -> int:
     """Count unique results that can survive the final eligibility filters."""
-    ids: set[str] = set()
+    authors: set[str] = set()
     for post in posts:
         created = _parse_created_at(post.created_at)
         post_id = str(post.id or "").strip()
+        author = str(post.username or "").strip().lstrip("@").casefold()
         if (
             post_id
+            and author
             and _matches_explicit_handle(post, query or "")
             and created is not None
             and cutoff <= created <= now_utc
             and post.text.strip()
             and not _is_reply_post(post)
         ):
-            ids.add(post_id)
-    return len(ids)
+            authors.add(author)
+    return len(authors)
 
 
 def _search_with_provider(
@@ -235,7 +237,11 @@ def search_project_posts(
             "Check the X search provider/API credentials and try again."
         )
 
-    unique: dict[str, tuple[datetime, Post]] = {}
+    # /project is an author-diverse discovery feed: keep only the newest
+    # qualifying post per author, even when search variants return several
+    # posts from the same account. This is deliberately scoped to /project.
+    unique_posts: dict[str, tuple[datetime, Post]] = {}
+    unique_authors: dict[str, tuple[datetime, Post]] = {}
     rejected_missing_date = 0
     rejected_outside_window = 0
     rejected_reply = 0
@@ -257,16 +263,22 @@ def search_project_posts(
         if _is_reply_post(post):
             rejected_reply += 1
             continue
-        previous = unique.get(post_id)
-        if previous is None or created > previous[0]:
-            unique[post_id] = (created, post)
+        previous_post = unique_posts.get(post_id)
+        if previous_post is None or created > previous_post[0]:
+            unique_posts[post_id] = (created, post)
 
-    ordered = sorted(unique.values(), key=lambda item: item[0], reverse=True)
+    for created, post in unique_posts.values():
+        author = str(post.username or "").strip().lstrip("@").casefold()
+        previous_author_post = unique_authors.get(author)
+        if previous_author_post is None or created > previous_author_post[0]:
+            unique_authors[author] = (created, post)
+
+    ordered = sorted(unique_authors.values(), key=lambda item: item[0], reverse=True)
     results = [post for _, post in ordered[:limit]]
     logging.info(
-        "PROJECT SEARCH FILTER SUMMARY | query=%s | raw_count=%s | unique_count=%s | "
+        "PROJECT SEARCH FILTER SUMMARY | query=%s | raw_count=%s | unique_posts=%s | unique_authors=%s | "
         "result_count=%s | missing_date=%s | outside_window=%s | replies=%s | empty=%s",
-        query, len(raw_posts), len(unique), len(results), rejected_missing_date,
+        query, len(raw_posts), len(unique_posts), len(unique_authors), len(results), rejected_missing_date,
         rejected_outside_window, rejected_reply, rejected_empty,
     )
     return results
