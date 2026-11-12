@@ -549,14 +549,14 @@ def _valid_reply(reply: str) -> bool:
     return True
 
 
-def _parse_replies(raw: str) -> list[str]:
-    """Extract three model replies from common tagged, numbered, or plain formats."""
+def _parse_reply_candidates(raw: str) -> list[str]:
+    """Extract reply candidates without silently discarding style failures."""
     if not raw or raw.upper().strip() == "NO_REPLY":
         return []
 
     text = raw.replace("\\r\\n", "\n").replace("\\n", "\n")
     text = re.sub(r"```(?:text|markdown)?", "", text, flags=re.IGNORECASE).replace("```", "").strip()
-    tagged_matches = list(re.finditer(r"(?<!\w)(R[123])\s*:\s*", text, flags=re.IGNORECASE))
+    tagged_matches = list(re.finditer(r"(?<!\\w)(R[123])\\s*:\\s*", text, flags=re.IGNORECASE))
     candidates: list[str] = []
     if len(tagged_matches) >= 3:
         tagged = {}
@@ -570,7 +570,7 @@ def _parse_replies(raw: str) -> list[str]:
             candidates = [tagged["R1"], tagged["R2"], tagged["R3"]]
 
     if len(candidates) != 3:
-        numbered_matches = list(re.finditer(r"(?<!\w)([123])[.)]\s*", text))
+        numbered_matches = list(re.finditer(r"(?<!\\w)([123])[.)]\\s*", text))
         if len(numbered_matches) >= 3:
             numbered = {}
             for index, match in enumerate(numbered_matches):
@@ -587,12 +587,40 @@ def _parse_replies(raw: str) -> list[str]:
         if len(lines) == 3:
             candidates = lines
 
-    replies: list[str] = []
-    for candidate in candidates:
-        cleaned = _clean_reply(candidate)
-        if cleaned.upper() == "NO_REPLY":
-            continue
-        if _valid_reply(cleaned) and cleaned not in replies:
+    return [_clean_reply(candidate) for candidate in candidates]
+
+
+def _reply_validation_errors(replies: list[str]) -> list[str]:
+    """Return actionable reasons a generated reply set failed validation."""
+    errors = []
+    if len(replies) != 3:
+        errors.append(f"expected exactly 3 replies, received {len(replies)}")
+    for index, reply in enumerate(replies, start=1):
+        issues = []
+        if not MIN_REPLY_CHARS <= len(reply) <= MAX_REPLY_CHARS:
+            issues.append(f"must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters (currently {len(reply)})")
+        if re.sub(r"[.!?]+$", "", reply.strip().lower()) in GENERIC_REPLIES:
+            issues.append("too generic; make it specific to the post")
+        if "—" in reply:
+            issues.append("contains a forbidden em dash")
+        if "?" in reply and not reply.rstrip().endswith("?"):
+            issues.append("question mark must be the final character")
+        if re.search(r"\\bactually\\b|\\bfeels\\s+like\\b|\\bfeels\\s+off\\b|\\bthis\\s+or\\s+that\\b", reply, re.IGNORECASE):
+            issues.append('contains a prohibited phrase ("actually", "feels like", "feels off", or "this or that")')
+        if issues:
+            errors.append(f"R{index}: " + "; ".join(issues))
+    if len(set(replies)) != len(replies):
+        errors.append("all three replies must be distinct")
+    if sum("?" in reply for reply in replies) > 1:
+        errors.append("at most one reply may be a question")
+    return errors
+
+
+def _parse_replies(raw: str) -> list[str]:
+    """Extract three model replies and retain only individually valid options."""
+    replies = []
+    for cleaned in _parse_reply_candidates(raw):
+        if cleaned.upper() != "NO_REPLY" and _valid_reply(cleaned) and cleaned not in replies:
             replies.append(cleaned)
     return replies
 
@@ -605,13 +633,17 @@ def generate_replies(post_text: str) -> list[str] | None:
 
     replies: list[str] = []
     raw = ""
+    validation_errors: list[str] = []
     for attempt in range(3):
         user_prompt = f"""POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Use a spontaneous personal voice when it fits (for example, a natural "ngl" or "tbh" opener), and prefer everyday wording over polished marketing labels like "game-changer" or "the biggest win". Keep grammar natural but do not over-polish the wording. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use no more than one question across all three, and prefer zero. Any question mark must be the final character of its reply. Avoid "actually", "feels like", "feels off", and "this or that" in the generated wording. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."""
         if attempt:
+            feedback = "\\n".join(f"- {error}" for error in validation_errors) or "- Follow the required three-line format exactly."
             user_prompt += (
-                "\n\nYour previous output did not pass validation. Regenerate all three replies. "
-                "Use exactly three lines in this format, with no introduction or extra text:\n"
-                "R1: [reply]\nR2: [reply]\nR3: [reply]"
+                "\\n\\nYour previous attempt failed these exact checks:\\n"
+                f"{feedback}\\n"
+                "Regenerate all three replies and correct every listed issue. Keep the same post-specific, natural voice; "
+                "do not make the replies generic just to pass validation. Use exactly three lines and no extra text:\\n"
+                "R1: [reply]\\nR2: [reply]\\nR3: [reply]"
             )
         try:
             completion = _create_groq_completion(
@@ -630,22 +662,25 @@ def generate_replies(post_text: str) -> list[str] | None:
             raise RuntimeError(f"Groq request failed: {exc}") from exc
 
         raw = (completion.choices[0].message.content or "").strip()
-        replies = _parse_replies(raw)
-        if len(replies) != 3:
-            # Diagnostic only: expose a short sample of model output, never credentials.
+        replies = _parse_reply_candidates(raw)
+        validation_errors = _reply_validation_errors(replies)
+        if validation_errors:
             logging.warning(
-                "Groq reply parse diagnostic | attempt=%s | finish_reason=%s | raw_chars=%s | parsed=%s | raw_sample=%r",
+                "Groq reply validation failed | attempt=%s | finish_reason=%s | errors=%s | reply_lengths=%s | raw_sample=%r",
                 attempt + 1,
                 getattr(completion.choices[0], "finish_reason", None),
-                len(raw),
+                validation_errors,
                 [len(reply) for reply in replies],
                 raw[:500],
             )
-        if len(replies) == 3 and validate_replies(replies):
+        else:
             break
 
-    if not validate_replies(replies):
-        raise RuntimeError(f"Groq returned replies that failed style validation after 3 attempts")
+    if validation_errors:
+        raise RuntimeError(
+            "Groq returned replies that failed style validation after 3 attempts: "
+            + "; ".join(validation_errors)
+        )
 
     # Final hard guard. This catches anything introduced by future prompt/model
     # changes before a suggestion is stored or sent to Telegram.
