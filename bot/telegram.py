@@ -19,6 +19,7 @@ from bot.db import (
     save_pending_replies,
 )
 from bot.x.provider import get_x_provider
+from bot.x.twscrape import XReplyTargetUnavailableError
 from bot.project_search import search_project_posts, normalize_handle
 from bot.reply_engine import generate_replies, validate_replies
 
@@ -144,6 +145,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         reply_url = str(result.get("url") or result.get("reply_url") or "").strip() or None
         mark_reply_posted(db, post_id, reply_id=reply_id, reply_url=reply_url)
         record_activity(db, "reply_posted", pending.get("handle", ""), post_id, f"Manual reply {reply_number} posted")
+    except XReplyTargetUnavailableError as exc:
+        # X 461 is target-specific and non-retryable. Leave the selected
+        # state terminal and remove the other reply buttons for this post.
+        error_text = str(exc).strip() or "X does not allow replies to this post."
+        record_activity(db, "reply_target_unavailable", pending.get("handle", ""), post_id, error_text)
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text(
+                "⚠️ REPLY NOT AVAILABLE\n\n"
+                f"{pending.get('handle', '')}\n\n"
+                f"{error_text}"
+            )
+        except Exception:
+            pass
+        return
     except Exception as exc:
         mark_reply_pending(db, post_id)
         error_text = str(exc).strip() or exc.__class__.__name__
