@@ -422,17 +422,19 @@ _GROQ_LAST_REQUEST_AT = 0.0
 def _create_groq_completion(client, **kwargs):
     global _GROQ_LAST_REQUEST_AT
     with _GROQ_REQUEST_LOCK:
-        wait_for = _GROQ_MIN_INTERVAL_SECONDS - (time.monotonic() - _GROQ_LAST_REQUEST_AT)
+        min_interval = max(0.0, float(os.getenv("GROQ_MIN_INTERVAL_SECONDS", str(_GROQ_MIN_INTERVAL_SECONDS))))
+        wait_for = min_interval - (time.monotonic() - _GROQ_LAST_REQUEST_AT)
         if wait_for > 0:
             time.sleep(wait_for)
-        for retry_number in range(4):
+        rate_limit_retries = max(0, int(os.getenv("GROQ_RATE_LIMIT_RETRIES", "3")))
+        for retry_number in range(rate_limit_retries + 1):
             try:
                 response = client.chat.completions.create(**kwargs)
                 _GROQ_LAST_REQUEST_AT = time.monotonic()
                 return response
             except Exception as exc:
                 status = getattr(exc, "status_code", None)
-                if (status != 429 and "429" not in str(exc)) or retry_number >= 3:
+                if (status != 429 and "429" not in str(exc)) or retry_number >= rate_limit_retries:
                     _GROQ_LAST_REQUEST_AT = time.monotonic()
                     raise
                 headers = getattr(getattr(exc, "response", None), "headers", {}) or {}
@@ -644,7 +646,8 @@ def generate_replies(
     replies: list[str] = []
     raw = ""
     validation_errors: list[str] = []
-    for attempt in range(3):
+    validation_attempts = max(1, int(os.getenv("GROQ_VALIDATION_ATTEMPTS", "3")))
+    for attempt in range(validation_attempts):
         user_prompt = f"""POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Use a spontaneous personal voice when it fits (for example, a natural "ngl" or "tbh" opener), and prefer everyday wording over polished marketing labels like "game-changer" or "the biggest win". Keep grammar natural but do not over-polish the wording. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use no more than one question across all three, and prefer zero. Any question mark must be the final character of its reply. Avoid "actually", "feels like", "feels off", and "this or that" in the generated wording. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."""
         if attempt:
             feedback = "\n".join(f"- {error}" for error in validation_errors) or "- Follow the required three-line format exactly."
