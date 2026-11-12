@@ -387,27 +387,37 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
         logger.info("NO FEED | %s | no new qualifying posts since last scan", handle)
         return "skipped"
 
-    # Send only the newest qualifying post from each monitored handle per cycle.
-    # Older qualifying posts remain eligible for a later scan only if they are still
-    # inside that scan window and have not already been delivered.
+    # Process every qualifying post returned for this handle, newest first.
+    # Sending only the newest one and then advancing the global scan checkpoint
+    # permanently discarded the older qualifying posts from the same window.
     qualifying.sort(
         key=lambda item: item[1] or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
-    post, _ = qualifying[0]
-    if AUTO_REPLY:
-        result = _process_post(db, post, handle, source="monitored account", provider=provider)
-    else:
-        result = _process_post(db, post, handle, source="monitored account")
+    sent_count = 0
+    had_error = False
+    outcomes = []
+    for post, _ in qualifying:
+        if AUTO_REPLY:
+            result = _process_post(db, post, handle, source="monitored account", provider=provider)
+        else:
+            result = _process_post(db, post, handle, source="monitored account")
+        outcomes.append((post.id, result))
+        if result == "sent":
+            sent_count += 1
+        elif result == "error":
+            had_error = True
 
     logger.info(
-        "HANDLE COMPLETE | %s | qualifying=%d | selected=%s | result=%s",
+        "HANDLE COMPLETE | %s | qualifying=%d | sent=%d | outcomes=%s",
         handle,
         len(qualifying),
-        post.id,
-        result,
+        sent_count,
+        outcomes,
     )
-    return result
+    if had_error:
+        return "error"
+    return "sent" if sent_count else "skipped"
 
 
 def _run_discovery(
