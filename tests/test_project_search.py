@@ -184,13 +184,13 @@ def test_search_excludes_replies_but_keeps_main_posts():
     assert [item.id for item in results] == ["main"]
 
 
-def test_search_caps_results_at_35():
+def test_search_caps_results_at_100():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
-    provider = FakeProvider([post(str(i), i, now) for i in range(40)])
+    provider = FakeProvider([post(str(i), i, now) for i in range(120)])
 
     results = search_project_posts("some_project", limit=99, now=now, provider=provider)
 
-    assert len(results) == 35
+    assert len(results) == 100
 
 
 def test_search_raises_when_all_provider_queries_fail():
