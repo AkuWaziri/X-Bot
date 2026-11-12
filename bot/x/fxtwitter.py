@@ -41,8 +41,17 @@ class FxTwitterProvider(XProvider):
                     (params or {}).get("q", ""),
                     body[:240].replace("\\n", " "),
                 )
-                return {"code": 200, "results": []}
-            raise RuntimeError(f"FxTwitter provider request failed: {exc}") from exc
+                return {"code": 200, "results": [], "cursor": {}}
+            if path.startswith("/2/profile/") and path.endswith("/statuses") and exc.code == 404:
+                # FxTwitter documents 404 for both missing accounts and empty /
+                # unavailable timelines. Neither should fail the whole feed cycle.
+                logging.info(
+                    "FXTWITTER TIMELINE EMPTY_OR_UNAVAILABLE | status=404 | path=%s | response=%s",
+                    path,
+                    body[:240].replace("\\n", " "),
+                )
+                return {"code": 200, "results": [], "cursor": {}}
+            raise RuntimeError(f"FxTwitter provider request failed: HTTP {exc.code}: {body[:500]}") from exc
         except Exception as exc:
             raise RuntimeError(f"FxTwitter provider request failed: {exc}") from exc
 
