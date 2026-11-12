@@ -277,6 +277,7 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
         await context.bot.send_message(chat_id=chat_id, text="❌ Project results were found, but delivery history is unavailable. No posts were sent to avoid duplicate feeds.")
         return
 
+    matched_count = len(posts)
     fresh_posts = []
     for post in posts:
         try:
@@ -290,12 +291,22 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
             continue
         fresh_posts.append(post)
 
+    skipped_count = matched_count - len(fresh_posts)
     if not fresh_posts:
-        await context.bot.send_message(chat_id=chat_id, text=f"🔎 No new posts for {label}. Matching posts were already sent by earlier /project searches.")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"🔎 Found {matched_count} matching posts for {label} in the last 3 hours, but all had already been delivered by earlier /project searches.",
+        )
         return
 
     posts = fresh_posts
-    await context.bot.send_message(chat_id=chat_id, text=f"🔎 {len(posts)} new post(s) for {label}; previously delivered posts were skipped.")
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"🔎 {len(posts)} new post(s) for {label} from {matched_count} matches. "
+            f"{skipped_count} previously delivered post(s) skipped."
+        ),
+    )
 
     for index, post in enumerate(posts, start=1):
         replies = None
