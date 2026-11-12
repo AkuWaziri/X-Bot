@@ -133,9 +133,9 @@ def test_search_returns_only_unique_posts_from_last_three_hours_sorted_newest_fi
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FakeProvider(
         [
-            post("old", 61, now),
-            post("newer", 4, now),
-            post("older", 178, now),
+            post("old", 61, now, username="old_author"),
+            post("newer", 4, now, username="new_author"),
+            post("older", 178, now, username="older_author"),
             post("future", -2, now),
             post("newer", 4, now, username="different_author"),
         ]
@@ -184,9 +184,30 @@ def test_search_excludes_replies_but_keeps_main_posts():
     assert [item.id for item in results] == ["main"]
 
 
+
+
+def test_search_returns_only_newest_post_per_author():
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+    provider = FakeProvider([
+        post("alice-old", 40, now, username="Alice"),
+        post("bob-new", 2, now, username="bob"),
+        post("alice-new", 5, now, username="alice"),
+        post("carol", 10, now, username="carol"),
+    ])
+
+    results = search_project_posts("security", now=now, provider=provider)
+
+    assert [(item.id, item.username) for item in results] == [
+        ("bob-new", "bob"),
+        ("alice-new", "alice"),
+        ("carol", "carol"),
+    ]
+    assert len({item.username.casefold() for item in results}) == len(results)
+
+
 def test_search_caps_results_at_100():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
-    provider = FakeProvider([post(str(i), i, now) for i in range(120)])
+    provider = FakeProvider([post(str(i), i, now, username=f"author{i}") for i in range(120)])
 
     results = search_project_posts("some_project", limit=999, now=now, provider=provider)
 
@@ -242,7 +263,7 @@ def test_fxtwitter_unverified_results_trigger_authenticated_fallback(monkeypatch
         url="https://x.com/alice/status/unverified",
         raw={"author": {"username": "alice", "verified": False}},
     )
-    verified = post("verified-fallback", 1, now)
+    verified = post("verified-fallback", 1, now, username="bob")
     provider = FxTwitterProvider()
     monkeypatch.setattr(provider, "search_posts", lambda query, limit=20: [unverified])
 
