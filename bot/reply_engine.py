@@ -615,6 +615,7 @@ def generate_replies(post_text: str) -> list[str] | None:
             )
         try:
             completion = _create_groq_completion(
+                client,
                 model=GROQ_MODEL,
                 temperature=1.0,
                 max_completion_tokens=1024,
