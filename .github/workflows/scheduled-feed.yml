@@ -41,6 +41,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # Scheduled feeds prioritize prompt Telegram delivery; failed suggestions are omitted.
+          GROQ_MIN_INTERVAL_SECONDS: "0"
+          GROQ_RATE_LIMIT_RETRIES: "0"
+          GROQ_VALIDATION_ATTEMPTS: "1"
           X_PROVIDER_MODE: fxtwitter
           AUTO_REPLY: "false"
           SCHEDULE_SLOT: ""
