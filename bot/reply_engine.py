@@ -556,7 +556,7 @@ def _parse_reply_candidates(raw: str) -> list[str]:
 
     text = raw.replace("\\r\\n", "\n").replace("\\n", "\n")
     text = re.sub(r"```(?:text|markdown)?", "", text, flags=re.IGNORECASE).replace("```", "").strip()
-    tagged_matches = list(re.finditer(r"(?<!\w)(R[123])\s*:\\s*", text, flags=re.IGNORECASE))
+    tagged_matches = list(re.finditer(r"(?<!\w)(R[123])\s*:\s*", text, flags=re.IGNORECASE))
     candidates: list[str] = []
     if len(tagged_matches) >= 3:
         tagged = {}
