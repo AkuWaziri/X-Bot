@@ -350,7 +350,7 @@ def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
         return "error"
 
 
-def _process_handle(db, provider, handle: str, scan_start: datetime, now: datetime) -> str:
+def _process_handle(db, provider, handle: str, scan_start: datetime, now: datetime, *, sent_counter: list[int] | None = None) -> str:
     try:
         posts = provider.get_latest_posts(handle, limit=20)
     except TwscrapeBlockedError:
@@ -415,6 +415,8 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
         sent_count,
         outcomes,
     )
+    if sent_counter is not None:
+        sent_counter.append(sent_count)
     if had_error:
         return "error"
     return "sent" if sent_count else "skipped"
@@ -526,17 +528,23 @@ def run_monitor_cycle() -> None:
 
     for handle in rotating_handles:
         try:
-            result = _process_handle(db, provider, handle, scan_start, now)
+            handle_sent_counts: list[int] = []
+            result = _process_handle(
+                db, provider, handle, scan_start, now, sent_counter=handle_sent_counts
+            )
+            monitored_sent += handle_sent_counts[0] if handle_sent_counts else 0
         except TwscrapeBlockedError as exc:
             logger.error("X PROVIDER BLOCKED | stopping cycle immediately: %s", exc)
             record_activity(db, "x_provider_blocked", handle, None, str(exc)[:500])
             return
         if result == "error":
             had_error = True
-        elif result == "sent":
-            monitored_sent += 1
-
-    logger.info("MONITORED COMPLETE | feeds=%d/%d", monitored_sent, MONITORED_HANDLES_PER_RUN)
+    
+    logger.info(
+        "MONITORED COMPLETE | feeds_sent=%d | handles_checked=%d",
+        monitored_sent,
+        len(rotating_handles),
+    )
 
     discovery_target = MAX_DISCOVERY_POSTS_PER_RUN
     discovery_sent, discovery_error = _run_discovery(db, provider, accounts, scan_start, now, discovery_target)
