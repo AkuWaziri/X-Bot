@@ -51,6 +51,29 @@ class ReplyEngineTests(unittest.TestCase):
             "shipping fast, users can see the progress",
         )
 
+    def test_validation_errors_explain_invalid_output(self):
+        from bot.reply_engine import _reply_validation_errors
+
+        errors = _reply_validation_errors([
+            "this actually looks useful",
+            "this actually looks useful",
+            "too short",
+        ])
+        self.assertTrue(any("actually" in error for error in errors))
+        self.assertTrue(any("distinct" in error for error in errors))
+        self.assertTrue(any("characters" in error for error in errors))
+
+    def test_candidate_parser_preserves_invalid_replies_for_diagnostics(self):
+        from bot.reply_engine import _parse_reply_candidates
+
+        candidates = _parse_reply_candidates(
+            "R1: this actually looks useful to the community\\n"
+            "R2: another specific observation about this launch\\n"
+            "R3: this is a third distinct thought about the launch"
+        )
+        self.assertEqual(len(candidates), 3)
+        self.assertIn("actually", candidates[0])
+
     def test_parse_requires_three_valid_distinct_replies(self):
         raw = """R1: this rollout really gives users something useful
 R2: the wallet flow is the detail i noticed first
