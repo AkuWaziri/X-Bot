@@ -490,6 +490,32 @@ def test_handle_scan_checkpoint_is_independent_for_each_account():
     assert _last_handle_scan_checkpoint(db, "@carol") is None
 
 
+def test_monitor_cycle_uses_each_handles_own_checkpoint(monkeypatch):
+    from bot.monitor import _mark_handle_scan_checkpoint
+
+    db = IntegrationDB()
+    checkpoint = datetime(2026, 9, 8, 6, 0, tzinfo=timezone.utc)
+    _mark_handle_scan_checkpoint(db, "@alice", checkpoint)
+    captured = []
+
+    def fake_process_handle(db, provider, handle, scan_start, now, *, sent_counter=None):
+        captured.append(scan_start)
+        if sent_counter is not None:
+            sent_counter.append(0)
+        return "skipped"
+
+    monkeypatch.setenv("TEST_MODE", "true")
+    monkeypatch.setattr("bot.monitor.load_accounts", lambda: ["@alice"])
+    monkeypatch.setattr("bot.monitor.get_x_provider", lambda: object())
+    monkeypatch.setattr("bot.monitor.get_db", lambda: db)
+    monkeypatch.setattr("bot.monitor._process_handle", fake_process_handle)
+    monkeypatch.setattr("bot.monitor._run_discovery", lambda *args: (0, False))
+
+    run_monitor_cycle()
+
+    assert captured == [checkpoint]
+
+
 def test_schedule_marker_prevents_duplicate_cycle(monkeypatch):
     from bot.monitor import _mark_schedule_processed
 
