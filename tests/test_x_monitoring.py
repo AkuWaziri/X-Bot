@@ -394,7 +394,7 @@ def test_groq_incomplete_reply_set_blocks_feed_delivery(monkeypatch):
     )
     calls = []
 
-    def fake_generate_replies(text):
+    def fake_generate_replies(text, **kwargs):
         calls.append(text)
         raise RuntimeError("Groq returned 2 valid replies instead of 3")
 
@@ -428,7 +428,7 @@ def test_groq_rate_limit_blocks_feed_delivery(monkeypatch):
     )
     calls = []
 
-    def fake_generate_replies(text):
+    def fake_generate_replies(text, **kwargs):
         calls.append(text)
         raise RuntimeError("Groq request failed: 429 Rate limit exceeded")
 
@@ -596,7 +596,7 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.save_post", lambda db, post: sent_posts.append(("saved", post.id)))
     monkeypatch.setattr("bot.monitor.save_pending_replies", lambda *args: saved_replies.append(args))
-    monkeypatch.setattr("bot.monitor.generate_replies", lambda text: ["good point", "interesting", "tell me more"])
+    monkeypatch.setattr("bot.monitor.generate_replies", lambda text, **kwargs: ["good point", "interesting", "tell me more"])
     monkeypatch.setattr("bot.monitor.validate_replies", lambda replies: True)
     monkeypatch.setattr("bot.monitor.send_new_post", lambda *args, **kwargs: sent_posts.append(("telegram", kwargs.get("post_id"))))
     monkeypatch.setattr(
@@ -672,7 +672,7 @@ def test_auto_reply_uncertain_attempt_is_not_retried(monkeypatch):
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.save_post", lambda db, value: None)
-    monkeypatch.setattr("bot.monitor.generate_replies", lambda text: ["good reply one", "good reply two", "good reply three"])
+    monkeypatch.setattr("bot.monitor.generate_replies", lambda text, **kwargs: ["good reply one", "good reply two", "good reply three"])
     monkeypatch.setattr("bot.monitor.validate_replies", lambda replies: True)
     monkeypatch.setattr("bot.monitor._latest_auto_reply_state", lambda db, post_id: ("auto_reply_started", None))
     monkeypatch.setattr("bot.monitor.record_activity", lambda *args: activity.append(args))
@@ -705,7 +705,7 @@ def test_auto_reply_posted_state_is_reused_without_duplicate_post(monkeypatch):
     monkeypatch.setattr("bot.monitor.post_seen", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.telegram_already_sent", lambda db, post_id: False)
     monkeypatch.setattr("bot.monitor.save_post", lambda db, value: None)
-    monkeypatch.setattr("bot.monitor.generate_replies", lambda text: ["good reply one", "good reply two", "good reply three"])
+    monkeypatch.setattr("bot.monitor.generate_replies", lambda text, **kwargs: ["good reply one", "good reply two", "good reply three"])
     monkeypatch.setattr("bot.monitor.validate_replies", lambda replies: True)
     monkeypatch.setattr("bot.monitor._latest_auto_reply_state", lambda db, post_id: ("auto_reply_posted", "already posted reply"))
     monkeypatch.setattr("bot.monitor.record_activity", lambda *args: None)
