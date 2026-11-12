@@ -52,7 +52,7 @@ class ReplyEngineTests(unittest.TestCase):
         )
 
     def test_parse_requires_three_valid_distinct_replies(self):
-        raw = """R1: this rollout actually gives users something useful
+        raw = """R1: this rollout really gives users something useful
 R2: the wallet flow is the detail i noticed first
 R3: curious where this goes once more people try it"""
         replies = _parse_replies(raw)
@@ -65,11 +65,11 @@ R3: curious where this goes once more people try it"""
         self.assertEqual(len(_parse_replies(raw)), 3)
 
     def test_parse_accepts_numbered_replies(self):
-        raw = "1. this rollout actually gives users something useful\\n2. the wallet flow is the detail i noticed first\\n3. curious where this goes once more people try it"
+        raw = "1. this rollout really gives users something useful\\n2. the wallet flow is the detail i noticed first\\n3. curious where this goes once more people try it"
         self.assertEqual(len(_parse_replies(raw)), 3)
 
     def test_parse_accepts_markdown_fenced_replies(self):
-        raw = "```text\\nR1: this rollout actually gives users something useful\\nR2: the wallet flow is the detail i noticed first\\nR3: curious where this goes once more people try it\\n```"
+        raw = "```text\\nR1: this rollout really gives users something useful\\nR2: the wallet flow is the detail i noticed first\\nR3: curious where this goes once more people try it\\n```"
         self.assertEqual(len(_parse_replies(raw)), 3)
 
     def test_short_reply_is_rejected(self):
