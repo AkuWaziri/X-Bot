@@ -51,3 +51,48 @@ def test_provider_factory_selects_mock_without_twitterapis(monkeypatch):
     provider = get_x_provider()
 
     assert isinstance(provider, MockXProvider)
+
+
+
+def test_fxtwitter_empty_profile_timeline_404_returns_no_posts(monkeypatch):
+    import io
+    import urllib.error
+
+    from bot.x.fxtwitter import FxTwitterProvider
+
+    def raise_not_found(request, timeout):
+        raise urllib.error.HTTPError(
+            request.full_url,
+            404,
+            "Not Found",
+            {},
+            io.BytesIO(b'{"code":404,"message":"User not found or empty timeline"}'),
+        )
+
+    monkeypatch.setattr("bot.x.fxtwitter.urllib.request.urlopen", raise_not_found)
+
+    posts = FxTwitterProvider().get_latest_posts("@binance", limit=20)
+
+    assert posts == []
+
+
+def test_fxtwitter_empty_search_404_returns_no_posts(monkeypatch):
+    import io
+    import urllib.error
+
+    from bot.x.fxtwitter import FxTwitterProvider
+
+    def raise_not_found(request, timeout):
+        raise urllib.error.HTTPError(
+            request.full_url,
+            404,
+            "Not Found",
+            {},
+            io.BytesIO(b'{"code":404,"message":"No search results"}'),
+        )
+
+    monkeypatch.setattr("bot.x.fxtwitter.urllib.request.urlopen", raise_not_found)
+
+    posts = FxTwitterProvider().search_posts("defi crypto", limit=20)
+
+    assert posts == []
