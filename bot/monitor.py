@@ -18,13 +18,9 @@ logger = logging.getLogger(__name__)
 MONITORED_HANDLES_PER_RUN = 20
 MAX_DISCOVERY_POSTS_PER_RUN = 5
 DISCOVERY_CANDIDATE_POOL_SIZE = 30
-# Run a feed cycle every 90 minutes, around the clock.
-SCHEDULE_TIMES_UTC = (
-    (0, 0), (1, 30), (3, 0), (4, 30),
-    (6, 0), (7, 30), (9, 0), (10, 30),
-    (12, 0), (13, 30), (15, 0), (16, 30),
-    (18, 0), (19, 30), (21, 0), (22, 30),
-)
+# Three daily feed cycles aligned with 12:00, 17:00 and 21:00 WAT.
+# WAT is UTC+1, so the corresponding UTC slots are 11:00, 16:00 and 20:00.
+SCHEDULE_TIMES_UTC = ((11, 0), (16, 0), (20, 0))
 SCHEDULE_ACTIVITY_EVENT = "schedule_processed"
 SCAN_CHECKPOINT_EVENT = "scan_checkpoint"
 HANDLE_SCAN_CHECKPOINT_EVENT = "handle_scan_checkpoint"
