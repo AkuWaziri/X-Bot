@@ -489,7 +489,7 @@ def test_schedule_marker_is_written_only_after_successful_cycle(monkeypatch):
     monkeypatch.setattr("bot.monitor.load_accounts", lambda: accounts)
     monkeypatch.setattr("bot.monitor.get_x_provider", lambda: object())
     monkeypatch.setattr("bot.monitor.get_db", lambda: db)
-    monkeypatch.setattr("bot.monitor._process_handle", lambda *args: "error")
+    monkeypatch.setattr("bot.monitor._process_handle", lambda *args, **kwargs: "error")
     monkeypatch.setattr("bot.monitor._run_discovery", lambda *args: (0, False))
     monkeypatch.setattr(
         "bot.monitor.record_activity",
@@ -513,7 +513,7 @@ def test_discovery_uses_five_post_target(monkeypatch):
     monkeypatch.setattr("bot.monitor.load_accounts", lambda: accounts)
     monkeypatch.setattr("bot.monitor.get_x_provider", lambda: object())
     monkeypatch.setattr("bot.monitor.get_db", lambda: db)
-    monkeypatch.setattr("bot.monitor._process_handle", lambda *args: "skipped")
+    monkeypatch.setattr("bot.monitor._process_handle", lambda *args, **kwargs: "skipped")
     monkeypatch.setattr(
         "bot.monitor._run_discovery",
         lambda db, provider, accounts, scan_start, now, max_posts: captured.append(max_posts) or (max_posts, False),
