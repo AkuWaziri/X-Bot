@@ -57,20 +57,24 @@ class MockXProvider(XProvider):
                 slug = candidate
                 break
 
-        username = f"mock_discovery_{slug}"
-        return [
-            Post(
-                id=f"mock-discovery-{slug}",
-                text=f"Mock discovery opportunity about {slug} crypto web3",
-                username=username,
-                created_at=(self.now - timedelta(minutes=3)).isoformat(),
-                url=f"https://x.com/{username}/status/mock-discovery-{slug}",
-                raw={
-                    "author": {"username": username, "verified": True},
-                    "public_metrics": {"like_count": 100, "retweet_count": 25},
-                },
+        posts = []
+        for index in range(2):
+            username = f"mock_discovery_{slug}_{index + 1}"
+            post_id = f"mock-discovery-{slug}-{index + 1}"
+            posts.append(
+                Post(
+                    id=post_id,
+                    text=f"Mock discovery opportunity {index + 1} about {slug} crypto web3",
+                    username=username,
+                    created_at=(self.now - timedelta(minutes=3 + index)).isoformat(),
+                    url=f"https://x.com/{username}/status/{post_id}",
+                    raw={
+                        "author": {"username": username, "verified": True},
+                        "public_metrics": {"like_count": 100, "retweet_count": 25},
+                    },
+                )
             )
-        ][:limit]
+        return posts[:limit]
 
     def create_reply(self, text: str, reply_to: str) -> dict[str, object]:
         return {"ok": True, "mock": True, "text": text, "reply_to": reply_to}
