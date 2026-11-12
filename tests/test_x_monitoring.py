@@ -94,6 +94,13 @@ class IntegrationTable:
         if self.name == "activity_log" and self.filters.get("event_type") == "scan_checkpoint":
             rows = [item for item in self.db.activities if item["event_type"] == "scan_checkpoint"]
             return type("Result", (), {"data": rows[-1:]})()
+        if self.name == "activity_log" and self.filters.get("event_type") == "handle_scan_checkpoint":
+            rows = [
+                item for item in self.db.activities
+                if item["event_type"] == "handle_scan_checkpoint"
+                and item["handle"] == self.filters.get("handle")
+            ]
+            return type("Result", (), {"data": rows[-1:]})()
         if self.name == "activity_log" and self.filters.get("event_type") == "handle_rotation":
             rows = [item for item in self.db.activities if item["event_type"] == "handle_rotation"]
             return type("Result", (), {"data": rows[-1:]})()
@@ -466,6 +473,21 @@ def test_last_scan_checkpoint_is_read_from_activity_log():
     )
 
     assert _last_scan_checkpoint(db) == datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc)
+
+
+def test_handle_scan_checkpoint_is_independent_for_each_account():
+    from bot.monitor import _last_handle_scan_checkpoint, _mark_handle_scan_checkpoint
+
+    db = IntegrationDB()
+    alice_scan = datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc)
+    bob_scan = datetime(2026, 9, 8, 13, 30, tzinfo=timezone.utc)
+
+    _mark_handle_scan_checkpoint(db, "@alice", alice_scan)
+    _mark_handle_scan_checkpoint(db, "@bob", bob_scan)
+
+    assert _last_handle_scan_checkpoint(db, "@alice") == alice_scan
+    assert _last_handle_scan_checkpoint(db, "@bob") == bob_scan
+    assert _last_handle_scan_checkpoint(db, "@carol") is None
 
 
 def test_schedule_marker_prevents_duplicate_cycle(monkeypatch):
