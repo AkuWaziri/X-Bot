@@ -409,10 +409,13 @@ def test_groq_incomplete_reply_set_blocks_feed_delivery(monkeypatch):
 
     result = _process_post(FakeDB(), post, "@alice", source="test")
 
-    assert result == "error"
+    assert result == "sent"
     assert len(calls) == 1
-    assert telegram_calls == []
-    assert any(item[1] == "error" for item in activity)
+    assert len(telegram_calls) == 1
+    assert telegram_calls[0]["suggested_replies"] is None
+    assert telegram_calls[0]["post_id"] is None
+    assert telegram_calls[0]["reply_reason"]
+    assert any(item[1] == "reply_generation_deferred" for item in activity)
 
 
 def test_groq_rate_limit_blocks_feed_delivery(monkeypatch):
@@ -440,10 +443,13 @@ def test_groq_rate_limit_blocks_feed_delivery(monkeypatch):
 
     result = _process_post(FakeDB(), post, "@alice", source="test")
 
-    assert result == "error"
+    assert result == "sent"
     assert len(calls) == 1
-    assert telegram_calls == []
-    assert any(item[1] == "error" for item in activity)
+    assert len(telegram_calls) == 1
+    assert telegram_calls[0]["suggested_replies"] is None
+    assert telegram_calls[0]["post_id"] is None
+    assert telegram_calls[0]["reply_reason"]
+    assert any(item[1] == "reply_generation_deferred" for item in activity)
 
 def test_discovery_topic_pool_covers_requested_categories():
     names = {topic.name for topic in DISCOVERY_TOPICS}
