@@ -552,7 +552,7 @@ def test_schedule_marker_is_written_only_after_successful_cycle(monkeypatch):
     assert not any(item["event_type"] == "scan_checkpoint" for item in db.activities)
 
 
-def test_discovery_uses_five_post_target(monkeypatch):
+def test_discovery_uses_ten_post_target(monkeypatch):
     accounts = [f"@integration{i}" for i in range(20)]
     db = IntegrationDB()
     captured = []
@@ -572,7 +572,7 @@ def test_discovery_uses_five_post_target(monkeypatch):
 
     run_monitor_cycle()
 
-    assert captured == [MAX_DISCOVERY_POSTS_PER_RUN] == [5]
+    assert captured == [MAX_DISCOVERY_POSTS_PER_RUN] == [10]
 
 
 def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypatch):
