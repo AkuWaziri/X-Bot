@@ -17,7 +17,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 15
     env:
       PYTHONPATH: .
     steps:
@@ -44,9 +44,9 @@ jobs:
           X_PROVIDER_MODE: fxtwitter
           AUTO_REPLY: "false"
           SCHEDULE_SLOT: ""
-          # Manual dispatch runs a bounded five-hour scan for an end-to-end delivery test.
+          # Manual dispatch is a short delivery smoke test; scheduled runs retain their normal window.
           TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
-          TEST_WINDOW_MINUTES: ${{ github.event_name == 'workflow_dispatch' && '300' || '10' }}
+          TEST_WINDOW_MINUTES: "10"
         run: python -m bot.monitor
 
   regression-tests:
