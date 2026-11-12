@@ -425,23 +425,31 @@ def _create_groq_completion(client, **kwargs):
         wait_for = _GROQ_MIN_INTERVAL_SECONDS - (time.monotonic() - _GROQ_LAST_REQUEST_AT)
         if wait_for > 0:
             time.sleep(wait_for)
-        try:
-            response = client.chat.completions.create(**kwargs)
-        except Exception as exc:
-            status = getattr(exc, "status_code", None)
-            if status != 429 and "429" not in str(exc):
-                raise
-            headers = getattr(getattr(exc, "response", None), "headers", {}) or {}
-            retry_after = headers.get("retry-after") or headers.get("Retry-After")
+        for retry_number in range(4):
             try:
-                delay = min(max(float(retry_after), 1.0), 60.0) if retry_after else 20.0
-            except (TypeError, ValueError):
-                delay = 20.0
-            time.sleep(delay)
-            response = client.chat.completions.create(**kwargs)
-        finally:
-            _GROQ_LAST_REQUEST_AT = time.monotonic()
-        return response
+                response = client.chat.completions.create(**kwargs)
+                _GROQ_LAST_REQUEST_AT = time.monotonic()
+                return response
+            except Exception as exc:
+                status = getattr(exc, "status_code", None)
+                if (status != 429 and "429" not in str(exc)) or retry_number >= 3:
+                    _GROQ_LAST_REQUEST_AT = time.monotonic()
+                    raise
+                headers = getattr(getattr(exc, "response", None), "headers", {}) or {}
+                retry_after = headers.get("retry-after") or headers.get("Retry-After")
+                fallback_delay = min(20.0 * (2 ** retry_number), 60.0)
+                try:
+                    delay = min(max(float(retry_after), 1.0), 120.0) if retry_after else fallback_delay
+                except (TypeError, ValueError):
+                    delay = fallback_delay
+                logging.warning(
+                    "Groq rate limit reached; retrying | attempt=%s | wait_seconds=%s",
+                    retry_number + 1,
+                    delay,
+                )
+                time.sleep(delay)
+                _GROQ_LAST_REQUEST_AT = time.monotonic()
+        raise RuntimeError("Groq request exhausted rate-limit retries")
 
 
 REPLY_DNA_REFERENCE = _load_reply_dna_reference()
