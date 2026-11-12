@@ -14,10 +14,10 @@ from bot.x.twscrape import TwscrapeBlockedError
 
 logger = logging.getLogger(__name__)
 
-# Production feed allocation per scheduled run: 20 monitored handles + 5 verified topic-discovery posts.
+# Production feed allocation per scheduled run: 20 monitored handles + up to 10 topic-discovery posts.
 MONITORED_HANDLES_PER_RUN = 20
-MAX_DISCOVERY_POSTS_PER_RUN = 5
-DISCOVERY_CANDIDATE_POOL_SIZE = 30
+MAX_DISCOVERY_POSTS_PER_RUN = 10
+DISCOVERY_CANDIDATE_POOL_SIZE = 50
 # Three daily feed cycles aligned with 12:00, 17:00 and 21:00 WAT.
 # WAT is UTC+1, so the corresponding UTC slots are 11:00, 16:00 and 20:00.
 SCHEDULE_TIMES_UTC = ((11, 0), (16, 0), (20, 0))
