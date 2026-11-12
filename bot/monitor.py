@@ -323,19 +323,26 @@ def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
         save_post(db, post)
         record_activity(db, "new_post", handle, post.id, post.text.replace("\n", " "))
 
+    replies = None
+    reply_reason = None
     try:
-        replies = generate_replies(post.text)
+        # Scheduled-feed generation is bounded and does not use the SDK's long
+        # automatic 429 retry backoff. Telegram feed delivery must not depend on Groq.
+        replies = generate_replies(post.text, request_timeout=15.0, max_retries=0)
+        if not replies or not validate_replies(replies):
+            raise RuntimeError("Groq returned invalid reply suggestions")
+        record_activity(db, "replies_suggested", handle, post.id, f"Three reply suggestions generated from {source}")
     except Exception as exc:
-        logger.warning("Groq reply generation failed for %s: %s", post.id, str(exc)[:300])
-        record_activity(db, "error", handle, post.id, f"Groq reply generation failed: {str(exc)[:500]}")
-        return "error"
-
-    if not replies or not validate_replies(replies):
-        logger.error("Groq reply validation failed for %s", post.id)
-        record_activity(db, "error", handle, post.id, "Groq returned invalid reply suggestions")
-        return "error"
-
-    record_activity(db, "replies_suggested", handle, post.id, f"Three reply suggestions generated from {source}")
+        reply_reason = "Reply suggestions temporarily unavailable; feed delivered without reply buttons."
+        logger.warning("Groq reply generation deferred for %s: %s", post.id, str(exc)[:300])
+        record_activity(
+            db,
+            "reply_generation_deferred",
+            handle,
+            post.id,
+            f"Feed delivery continued without reply options: {str(exc)[:500]}",
+        )
+        replies = None
 
     auto_reply_text = None
     if AUTO_REPLY:
@@ -366,7 +373,15 @@ def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
     try:
         if telegram_already_sent(db, post.id):
             return "skipped"
-        send_new_post(handle, post.text, post.url, suggested_replies=None if auto_reply_text else replies, post_id=None if auto_reply_text else post.id, auto_reply_text=auto_reply_text)
+        send_new_post(
+            handle,
+            post.text,
+            post.url,
+            suggested_replies=None if auto_reply_text else replies,
+            post_id=None if auto_reply_text or not replies else post.id,
+            auto_reply_text=auto_reply_text,
+            reply_reason=None if auto_reply_text or replies else reply_reason,
+        )
         record_activity(db, "telegram_sent", handle, post.id, f"Post notification sent to Telegram from {source}")
         return "sent"
     except Exception:
