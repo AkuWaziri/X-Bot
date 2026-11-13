@@ -250,7 +250,7 @@ def test_topic_selection_rotates_without_repeating_previous_batch():
 def test_monitored_handle_selection_uses_random_sample(monkeypatch):
     from bot.monitor import _select_rotating_handles
 
-    accounts = [f"@user{i:02d}" for i in range(20)]
+    accounts = [f"@user{i:02d}" for i in range(30)]
     db = IntegrationDB()
     calls = []
 
@@ -262,7 +262,7 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
 
     selected = _select_rotating_handles(db, accounts)
 
-    assert len(selected) == 20
+    assert len(selected) == 25
     assert calls
     assert calls[0][1] == 25
 
