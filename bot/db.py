@@ -22,7 +22,7 @@ def diagnose_supabase_connection() -> None:
     key_kind = "sb_secret" if key.startswith("sb_secret_") else (
         "legacy_jwt" if key.startswith("eyJ") else ("other" if key else "missing")
     )
-    logger.info(
+    logger.warning(
         "SUPABASE DIAGNOSTIC | url_configured=%s | secret_key_configured=%s | key_kind=%s | key_length=%d",
         bool(SUPABASE_URL), bool(key), key_kind, len(key),
     )
@@ -39,12 +39,12 @@ def diagnose_supabase_connection() -> None:
             if value.startswith("eyJ"):
                 return "legacy_jwt"
             return "other" if value else "missing"
-        logger.info(
+        logger.warning(
             "SUPABASE DIAGNOSTIC HEADERS | apikey_present=%s | apikey_kind=%s | authorization_present=%s | authorization_kind=%s",
             bool(api_key_header), key_type(api_key_header), bool(auth_header), key_type(auth_value),
         )
         result = db.table("owned_posts").select("post_id").limit(1).execute()
-        logger.info("SUPABASE DIAGNOSTIC READ | table=owned_posts | success=true | rows=%d", len(result.data or []))
+        logger.warning("SUPABASE DIAGNOSTIC READ | table=owned_posts | success=true | rows=%d", len(result.data or []))
     except Exception as exc:
         response = getattr(exc, "response", None)
         status = getattr(response, "status_code", None)
