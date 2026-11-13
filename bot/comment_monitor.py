@@ -68,7 +68,7 @@ def _remember_owned_posts(db, posts) -> set[str]:
     return {row["post_id"] for row in rows}
 
 
-def _notify_comment(db, bot, comment, root_post_id: str) -> bool:
+def _notify_comment(db, bot, loop, comment, root_post_id: str) -> bool:
     if _already_notified(db, comment.id):
         return False
 
@@ -106,11 +106,7 @@ def _notify_comment(db, bot, comment, root_post_id: str) -> bool:
         [InlineKeyboardButton("3️⃣ POST REPLY 3", callback_data=f"select:3:{comment.id}")],
         [InlineKeyboardButton("❌ REJECT ALL", callback_data=f"reject:{comment.id}")],
     ])
-    bot.send_message(
-        chat_id=TELEGRAM_CHAT_ID,
-        text=message[:4096],
-        reply_markup=keyboard,
-    )
+    import asyncio\n    future = asyncio.run_coroutine_threadsafe(\n        bot.send_message(\n            chat_id=TELEGRAM_CHAT_ID,\n            text=message[:4096],\n            reply_markup=keyboard,\n        ),\n        loop,\n    )\n    future.result(timeout=35)
     db.table("notified_comments").insert({
         "comment_id": str(comment.id),
         "root_post_id": str(root_post_id),
@@ -126,7 +122,7 @@ def _notify_comment(db, bot, comment, root_post_id: str) -> bool:
     return True
 
 
-def scan_owned_post_comments(bot) -> dict[str, int]:
+def scan_owned_post_comments(bot, loop) -> dict[str, int]:
     """Scan replies addressed to @akuwazir and keep only threads rooted at our posts."""
     if not TELEGRAM_CHAT_ID:
         raise RuntimeError("TELEGRAM_CHAT_ID is not configured")
@@ -173,7 +169,7 @@ def scan_owned_post_comments(bot) -> dict[str, int]:
             continue
 
         try:
-            if _notify_comment(db, bot, comment, root_id):
+            if _notify_comment(db, bot, loop, comment, root_id):
                 delivered += 1
         except Exception as exc:
             deferred += 1
@@ -205,7 +201,7 @@ async def comment_monitor_loop(application) -> None:
     )
     while True:
         try:
-            await asyncio.to_thread(scan_owned_post_comments, application.bot)
+            await asyncio.to_thread(scan_owned_post_comments, application.bot, asyncio.get_running_loop())
         except asyncio.CancelledError:
             raise
         except Exception:
