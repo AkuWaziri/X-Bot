@@ -489,7 +489,12 @@ def main() -> None:
     secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 
     application = (
-        Application.builder()\n        .token(TELEGRAM_BOT_TOKEN)\n        .post_init(_post_init)\n        .post_shutdown(_post_shutdown)\n        .build()\n    )
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .post_init(_post_init)
+        .post_shutdown(_post_shutdown)
+        .build()
+    )
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("project", project))
