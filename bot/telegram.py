@@ -453,6 +453,29 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("🟢 X-Bot online\nManual reply selection: ON")
 
 
+async def _post_init(application: Application) -> None:
+    """Start the independent owned-post comment watcher with the webhook app."""
+    from bot.comment_monitor import comment_monitor_loop
+
+    task = asyncio.create_task(
+        comment_monitor_loop(application),
+        name="x-bot-owned-post-comment-monitor",
+    )
+    application.bot_data["owned_post_comment_task"] = task
+    logging.info("OWN POST COMMENT MONITOR TASK REGISTERED | owner=@akuwazir")
+
+
+async def _post_shutdown(application: Application) -> None:
+    task = application.bot_data.get("owned_post_comment_task")
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    logging.info("OWN POST COMMENT MONITOR STOPPED")
+
+
 def main() -> None:
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured")
@@ -465,7 +488,7 @@ def main() -> None:
     webhook_url = f"{base_url}/telegram"
     secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application = (\n        Application.builder()\n        .token(TELEGRAM_BOT_TOKEN)\n        .post_init(_post_init)\n        .post_shutdown(_post_shutdown)\n        .build()\n    )
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("project", project))
