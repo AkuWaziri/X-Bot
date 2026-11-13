@@ -120,3 +120,36 @@ def test_fxtwitter_omits_reply_statuses_from_profile_timelines():
 
     assert reply is None
     assert original is not None
+
+
+
+def test_fxtwitter_rejects_reply_when_only_conversation_id_identifies_it():
+    from bot.x.fxtwitter import FxTwitterProvider
+
+    item = {
+        "type": "status",
+        "id": "reply-2",
+        "text": "this is a reply",
+        "created_at": "2026-11-13T10:00:00Z",
+        "conversation_id": "root-1",
+        "author": {"screen_name": "alice", "verified": True},
+    }
+
+    assert FxTwitterProvider._to_post(item) is None
+
+
+def test_fxtwitter_keeps_original_post_with_matching_conversation_id():
+    from bot.x.fxtwitter import FxTwitterProvider
+
+    item = {
+        "type": "status",
+        "id": "root-1",
+        "text": "this is an original post",
+        "created_at": "2026-11-13T10:00:00Z",
+        "conversation_id": "root-1",
+        "author": {"screen_name": "alice", "verified": True},
+    }
+
+    post = FxTwitterProvider._to_post(item)
+    assert post is not None
+    assert post.id == "root-1"
