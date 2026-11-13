@@ -9,7 +9,7 @@ DAILY_TOKEN_LIMIT = max(1, int(os.getenv("GROQ_DAILY_TOKEN_LIMIT", "200000")))
 CATEGORY_PERCENTAGES = {
     "project": 50,
     "scheduled": 40,
-    "emergency": 10,
+    "comments": 10,
 }
 # Covers the compacted request prompt plus a bounded completion. Actual usage
 # is settled from Groq's response and unused reservation is returned.
