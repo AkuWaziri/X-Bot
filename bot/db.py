@@ -1,3 +1,5 @@
+import logging
+
 from supabase import Client, create_client
 
 from bot.config import SUPABASE_SECRET_KEY, SUPABASE_URL
@@ -11,6 +13,47 @@ def get_db() -> Client:
         raise RuntimeError("SUPABASE_SECRET_KEY is not configured")
     return create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
 
+
+
+def diagnose_supabase_connection() -> None:
+    """Run a read-only startup diagnostic without exposing credentials."""
+    logger = logging.getLogger(__name__)
+    key = SUPABASE_SECRET_KEY or ""
+    key_kind = "sb_secret" if key.startswith("sb_secret_") else (
+        "legacy_jwt" if key.startswith("eyJ") else ("other" if key else "missing")
+    )
+    logger.info(
+        "SUPABASE DIAGNOSTIC | url_configured=%s | secret_key_configured=%s | key_kind=%s | key_length=%d",
+        bool(SUPABASE_URL), bool(key), key_kind, len(key),
+    )
+    try:
+        db = get_db()
+        session = getattr(getattr(db, "postgrest", None), "session", None)
+        headers = getattr(session, "headers", {}) or {}
+        api_key_header = str(headers.get("apikey", ""))
+        auth_header = str(headers.get("Authorization", ""))
+        auth_value = auth_header.removeprefix("Bearer ").strip()
+        def key_type(value: str) -> str:
+            if value.startswith("sb_secret_"):
+                return "sb_secret"
+            if value.startswith("eyJ"):
+                return "legacy_jwt"
+            return "other" if value else "missing"
+        logger.info(
+            "SUPABASE DIAGNOSTIC HEADERS | apikey_present=%s | apikey_kind=%s | authorization_present=%s | authorization_kind=%s",
+            bool(api_key_header), key_type(api_key_header), bool(auth_header), key_type(auth_value),
+        )
+        result = db.table("owned_posts").select("post_id").limit(1).execute()
+        logger.info("SUPABASE DIAGNOSTIC READ | table=owned_posts | success=true | rows=%d", len(result.data or []))
+    except Exception as exc:
+        response = getattr(exc, "response", None)
+        status = getattr(response, "status_code", None)
+        code = getattr(exc, "code", None)
+        message = str(getattr(exc, "message", "") or exc)[:300]
+        logger.error(
+            "SUPABASE DIAGNOSTIC READ | table=owned_posts | success=false | status=%s | code=%s | error=%s",
+            status, code, message,
+        )
 
 def post_seen(db: Client, post_id: str) -> bool:
     result = db.table("posts_seen").select("post_id").eq("post_id", post_id).limit(1).execute()
