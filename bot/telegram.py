@@ -352,7 +352,7 @@ async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         if replies is None:
             try:
-                replies = await asyncio.to_thread(generate_replies, post.text)
+                replies = await asyncio.to_thread(generate_replies, post.text, usage_class="project")
                 if replies and len(replies) == 3:
                     if storage_available and (existing is None or (existing.get("status") == "pending" and not validate_replies([
                         str(existing.get("reply_1") or "").strip(),
