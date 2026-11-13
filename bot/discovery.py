@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from bot.x.base import Post, XProvider
+from bot.x.base import Post, XProvider, is_reply_payload
 
 
 @dataclass(frozen=True)
@@ -192,6 +192,14 @@ def discover_posts(
 
         accepted_for_topic = 0
         for post in posts:
+            if is_reply_payload(post.raw, post.id):
+                logging.getLogger(__name__).info(
+                    "DISCOVERY REPLY/COMMENT SKIPPED | topic=%s | post_id=%s | author=%s",
+                    topic.name,
+                    post.id,
+                    post.username,
+                )
+                continue
             username = post.username.lstrip("@").lower()
             if not username or username in monitored or not _is_verified(post) or not post.text.strip():
                 continue
