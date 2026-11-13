@@ -107,7 +107,9 @@ def _notify_comment(db, bot, loop, comment, root_post_id: str) -> bool:
         [InlineKeyboardButton("❌ REJECT ALL", callback_data=f"reject:{comment.id}")],
     ])
     import asyncio
-    future = asyncio.run_coroutine_threadsafe(\n        bot.send_message(\n            chat_id=TELEGRAM_CHAT_ID,\n            text=message[:4096],\n            reply_markup=keyboard,\n        ),\n        loop,\n    )\n    future.result(timeout=35)
+    future = asyncio.run_coroutine_threadsafe(
+        bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID,\n            text=message[:4096],\n            reply_markup=keyboard,\n        ),\n        loop,\n    )\n    future.result(timeout=35)
     db.table("notified_comments").insert({
         "comment_id": str(comment.id),
         "root_post_id": str(root_post_id),
