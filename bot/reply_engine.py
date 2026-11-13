@@ -633,7 +633,7 @@ def generate_replies(
     *,
     request_timeout: float | None = None,
     max_retries: int | None = None,
-    usage_class: str = "emergency",
+    usage_class: str = "comments",
 ) -> list[str] | None:
     """Generate three distinct human-style reply suggestions, or None."""
     if not GROQ_API_KEY:
