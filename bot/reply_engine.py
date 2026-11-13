@@ -8,6 +8,7 @@ from pathlib import Path
 from groq import Groq
 
 from bot.config import GROQ_API_KEY, GROQ_MODEL, MAX_REPLY_CHARS, MIN_REPLY_CHARS
+from bot.token_budget import release_tokens, reserve_tokens, settle_tokens
 
 STYLE_EXAMPLES = """
 Examples of the account's natural X reply style. These are voice references, not mandatory formats:
@@ -632,6 +633,7 @@ def generate_replies(
     *,
     request_timeout: float | None = None,
     max_retries: int | None = None,
+    usage_class: str = "emergency",
 ) -> list[str] | None:
     """Generate three distinct human-style reply suggestions, or None."""
     if not GROQ_API_KEY:
@@ -647,7 +649,7 @@ def generate_replies(
     replies: list[str] = []
     raw = ""
     validation_errors: list[str] = []
-    validation_attempts = max(1, int(os.getenv("GROQ_VALIDATION_ATTEMPTS", "3")))
+    validation_attempts = max(1, min(3, int(os.getenv("GROQ_VALIDATION_ATTEMPTS", "2"))))
     for attempt in range(validation_attempts):
         user_prompt = f"""POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Use a spontaneous personal voice when it fits (for example, a natural "ngl" or "tbh" opener), and prefer everyday wording over polished marketing labels like "game-changer" or "the biggest win". Keep grammar natural but do not over-polish the wording. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use no more than one question across all three, and prefer zero. Any question mark must be the final character of its reply. Avoid "actually", "feels like", "feels off", and "this or that" in the generated wording. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."""
         if attempt:
@@ -659,12 +661,13 @@ def generate_replies(
                 "do not make the replies generic just to pass validation. Use exactly three lines and no extra text:\n"
                 "R1: [reply]\nR2: [reply]\nR3: [reply]"
             )
+        reservation_id = reserve_tokens(usage_class)
         try:
             completion = _create_groq_completion(
                 client,
                 model=GROQ_MODEL,
                 temperature=1.0,
-                max_completion_tokens=1024,
+                max_completion_tokens=256,
                 reasoning_effort="low",
                 include_reasoning=False,
                 messages=[
@@ -673,7 +676,30 @@ def generate_replies(
                 ],
             )
         except Exception as exc:
+            try:
+                release_tokens(reservation_id)
+            except Exception:
+                logging.exception("Groq token reservation release failed")
             raise RuntimeError(f"Groq request failed: {exc}") from exc
+
+        usage = getattr(completion, "usage", None)
+        actual_tokens = getattr(usage, "total_tokens", None) if usage else None
+        if actual_tokens is None:
+            actual_tokens = 3000
+            logging.warning("Groq response omitted usage metadata; settling conservative estimate")
+        try:
+            settle_tokens(reservation_id, int(actual_tokens))
+        except Exception:
+            # Do not discard successfully generated suggestions because usage
+            # accounting failed; the reservation remains visible for recovery.
+            logging.exception("Groq token usage settlement failed | reservation=%s", reservation_id)
+        logging.info(
+            "GROQ RESPONSE USAGE | class=%s | prompt_tokens=%s | completion_tokens=%s | total_tokens=%s",
+            usage_class,
+            getattr(usage, "prompt_tokens", "unknown") if usage else "unknown",
+            getattr(usage, "completion_tokens", "unknown") if usage else "unknown",
+            actual_tokens,
+        )
 
         raw = (completion.choices[0].message.content or "").strip()
         replies = _parse_reply_candidates(raw)
