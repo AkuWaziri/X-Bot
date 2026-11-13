@@ -15,7 +15,7 @@ from bot.x.twscrape import TwscrapeBlockedError
 logger = logging.getLogger(__name__)
 
 # Production feed allocation per scheduled run: 20 monitored handles + up to 10 topic-discovery posts.
-MONITORED_HANDLES_PER_RUN = 20
+MONITORED_HANDLES_PER_RUN = 25
 MAX_DISCOVERY_POSTS_PER_RUN = 10
 DISCOVERY_CANDIDATE_POOL_SIZE = 50
 # Three daily feed cycles aligned with 12:00, 17:00 and 21:00 WAT.
@@ -201,6 +201,27 @@ def _parse_created_at(value: str | None) -> datetime | None:
 def _is_recent_for_schedule(post, scan_start: datetime, now: datetime) -> bool:
     created = _parse_created_at(post.created_at)
     return created is not None and scan_start < created <= now
+
+
+def _is_reply_post(post) -> bool:
+    """Reject replies/comments so monitored feeds contain original posts only."""
+    raw = post.raw or {}
+    fields = (
+        "inReplyToTweetId", "in_reply_to_tweet_id", "in_reply_to_status_id",
+        "in_reply_to_status_id_str", "inReplyToStatusId", "reply_to_id",
+        "reply_to", "replying_to", "in_reply_to",
+    )
+    for field in fields:
+        value = raw.get(field)
+        if value not in (None, "", 0, False, [], {}):
+            return True
+    legacy = raw.get("legacy")
+    if isinstance(legacy, dict):
+        for field in ("in_reply_to_status_id", "in_reply_to_status_id_str"):
+            value = legacy.get(field)
+            if value not in (None, "", 0, False):
+                return True
+    return False
 
 
 def _select_handles(accounts: list[str]) -> list[str]:
@@ -413,6 +434,9 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
     for post in posts:
         parsed = _parse_created_at(post.created_at)
         logger.info("POST | %s | id=%s | created_at=%r | parsed_utc=%s", handle, post.id, post.created_at, parsed.isoformat() if parsed else "INVALID")
+        if _is_reply_post(post):
+            logger.info("REPLY/COMMENT SKIPPED | handle=%s | post_id=%s", handle, post.id)
+            continue
         if not _is_verified(post):
             logger.info("UNVERIFIED POST SKIPPED | handle=%s | post_id=%s | author=%s", handle, post.id, post.username)
             continue
@@ -427,39 +451,27 @@ def _process_handle(db, provider, handle: str, scan_start: datetime, now: dateti
         logger.info("NO FEED | %s | no new qualifying posts since last scan", handle)
         return "skipped"
 
-    # Process every qualifying post returned for this handle, newest first.
-    # Sending only the newest one and then advancing the global scan checkpoint
-    # permanently discarded the older qualifying posts from the same window.
+    # Exactly one original post per monitored handle per schedule: newest first.
     qualifying.sort(
         key=lambda item: item[1] or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
-    sent_count = 0
-    had_error = False
-    outcomes = []
-    for post, _ in qualifying:
-        if AUTO_REPLY:
-            result = _process_post(db, post, handle, source="monitored account", provider=provider)
-        else:
-            result = _process_post(db, post, handle, source="monitored account")
-        outcomes.append((post.id, result))
-        if result == "sent":
-            sent_count += 1
-        elif result == "error":
-            had_error = True
+    post = qualifying[0][0]
+    if AUTO_REPLY:
+        result = _process_post(db, post, handle, source="monitored account", provider=provider)
+    else:
+        result = _process_post(db, post, handle, source="monitored account")
 
     logger.info(
-        "HANDLE COMPLETE | %s | qualifying=%d | sent=%d | outcomes=%s",
+        "HANDLE COMPLETE | %s | qualifying=%d | selected_post=%s | outcome=%s",
         handle,
         len(qualifying),
-        sent_count,
-        outcomes,
+        post.id,
+        result,
     )
     if sent_counter is not None:
-        sent_counter.append(sent_count)
-    if had_error:
-        return "error"
-    return "sent" if sent_count else "skipped"
+        sent_counter.append(1 if result == "sent" else 0)
+    return result
 
 
 def _run_discovery(
