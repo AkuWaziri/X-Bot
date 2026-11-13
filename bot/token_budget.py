@@ -13,7 +13,7 @@ CATEGORY_PERCENTAGES = {
 }
 # Covers the compacted request prompt plus a bounded completion. Actual usage
 # is settled from Groq's response and unused reservation is returned.
-REQUEST_RESERVATION_TOKENS = max(512, int(os.getenv("GROQ_REQUEST_RESERVATION_TOKENS", "6000")))
+REQUEST_RESERVATION_TOKENS = max(512, int(os.getenv("GROQ_REQUEST_RESERVATION_TOKENS", "3000")))
 
 
 class GroqBudgetExceeded(RuntimeError):
