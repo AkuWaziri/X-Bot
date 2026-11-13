@@ -5,7 +5,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
-from bot.x.base import Post, XProvider
+from bot.x.base import Post, XProvider, is_reply_payload
 
 
 class FxTwitterProvider(XProvider):
@@ -74,23 +74,9 @@ class FxTwitterProvider(XProvider):
         if item.get("type") != "status":
             return None
 
-        # Profile status timelines may include replies. Never surface those as
-        # top-level feed posts, even when the provider labels them as statuses.
-        reply_fields = (
-            "replying_to", "reply_to", "reply_to_id", "in_reply_to",
-            "in_reply_to_status_id", "in_reply_to_status_id_str",
-            "in_reply_to_tweet_id", "inReplyToTweetId",
-        )
-        if any(item.get(field) not in (None, "", 0, False, [], {}) for field in reply_fields):
-            return None
-        legacy = item.get("legacy") or {}
-        if isinstance(legacy, dict) and any(
-            legacy.get(field) not in (None, "", 0, False)
-            for field in ("in_reply_to_status_id", "in_reply_to_status_id_str")
-        ):
-            return None
-
         tweet_id = str(item.get("id") or "").strip()
+        if is_reply_payload(item, tweet_id):
+            return None
         text = str(item.get("text") or "").strip()
         author = item.get("author") or {}
         username = str(author.get("screen_name") or "").strip()
