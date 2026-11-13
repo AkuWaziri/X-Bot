@@ -114,7 +114,8 @@ def _notify_comment(db, bot, loop, comment, root_post_id: str) -> bool:
             reply_markup=keyboard,
         ),
         loop,
-    )\n    future.result(timeout=35)
+    )
+    future.result(timeout=35)
     db.table("notified_comments").insert({
         "comment_id": str(comment.id),
         "root_post_id": str(root_post_id),
