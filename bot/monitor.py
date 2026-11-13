@@ -11,6 +11,7 @@ from bot.reply_engine import generate_replies, validate_replies
 from bot.telegram import send_new_post
 from bot.x.provider import get_x_provider
 from bot.x.twscrape import TwscrapeBlockedError
+from bot.x.base import is_reply_payload
 
 logger = logging.getLogger(__name__)
 
@@ -204,24 +205,8 @@ def _is_recent_for_schedule(post, scan_start: datetime, now: datetime) -> bool:
 
 
 def _is_reply_post(post) -> bool:
-    """Reject replies/comments so monitored feeds contain original posts only."""
-    raw = post.raw or {}
-    fields = (
-        "inReplyToTweetId", "in_reply_to_tweet_id", "in_reply_to_status_id",
-        "in_reply_to_status_id_str", "inReplyToStatusId", "reply_to_id",
-        "reply_to", "replying_to", "in_reply_to",
-    )
-    for field in fields:
-        value = raw.get(field)
-        if value not in (None, "", 0, False, [], {}):
-            return True
-    legacy = raw.get("legacy")
-    if isinstance(legacy, dict):
-        for field in ("in_reply_to_status_id", "in_reply_to_status_id_str"):
-            value = legacy.get(field)
-            if value not in (None, "", 0, False):
-                return True
-    return False
+    """Reject replies/comments using normalized cross-provider metadata."""
+    return is_reply_payload(post.raw, post.id)
 
 
 def _select_handles(accounts: list[str]) -> list[str]:
