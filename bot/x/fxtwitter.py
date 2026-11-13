@@ -70,12 +70,12 @@ class FxTwitterProvider(XProvider):
         return data
 
     @staticmethod
-    def _to_post(item: dict[str, Any]) -> Post | None:
+    def _to_post(item: dict[str, Any], *, include_replies: bool = False) -> Post | None:
         if item.get("type") != "status":
             return None
 
         tweet_id = str(item.get("id") or "").strip()
-        if is_reply_payload(item, tweet_id):
+        if not include_replies and is_reply_payload(item, tweet_id):
             return None
         text = str(item.get("text") or "").strip()
         author = item.get("author") or {}
@@ -149,6 +149,8 @@ class FxTwitterProvider(XProvider):
         path: str,
         params: dict[str, Any],
         limit: int,
+        *,
+        include_replies: bool = False,
     ) -> list[Post]:
         """Read multiple FxTwitter pages because count is a page size, not a total."""
         target = min(max(int(limit), 1), 100)
@@ -167,7 +169,7 @@ class FxTwitterProvider(XProvider):
             data = self._request(path, request_params)
             items = data.get("results") or []
             for item in items:
-                post = self._to_post(item)
+                post = self._to_post(item, include_replies=include_replies)
                 if post is not None:
                     posts.append(post)
                     if len(posts) >= target:
@@ -200,6 +202,16 @@ class FxTwitterProvider(XProvider):
             limit,
         )
 
+    def search_replies(self, query: str, limit: int = 100) -> list[Post]:
+        """Search X replies without applying the normal timeline reply filter."""
+        if not query.strip():
+            return []
+        return self._get_paginated_posts(
+            "/2/search",
+            {"q": query, "feed": "latest"},
+            limit,
+            include_replies=True,
+        )
     def create_reply(self, text: str, reply_to: str) -> dict[str, Any]:
         # Reading is decoupled from the X web session. Only publishing uses
         # the existing authenticated session.
