@@ -454,7 +454,10 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def _post_init(application: Application) -> None:
-    """Start the independent owned-post comment watcher with the webhook app."""
+    """Diagnose Supabase access, then start the independent comment watcher."""
+    from bot.db import diagnose_supabase_connection
+
+    await asyncio.to_thread(diagnose_supabase_connection)
     from bot.comment_monitor import comment_monitor_loop
 
     task = asyncio.create_task(
