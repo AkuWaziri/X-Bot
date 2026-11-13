@@ -96,3 +96,27 @@ def test_fxtwitter_empty_search_404_returns_no_posts(monkeypatch):
     posts = FxTwitterProvider().search_posts("defi crypto", limit=20)
 
     assert posts == []
+
+
+
+def test_fxtwitter_omits_reply_statuses_from_profile_timelines():
+    from bot.x.fxtwitter import FxTwitterProvider
+
+    reply = FxTwitterProvider._to_post({
+        "type": "status",
+        "id": "reply-1",
+        "text": "a comment under the author's post",
+        "replying_to": "original-1",
+        "author": {"screen_name": "alice"},
+        "created_at": "2026-11-13T18:00:00Z",
+    })
+    original = FxTwitterProvider._to_post({
+        "type": "status",
+        "id": "original-1",
+        "text": "the author's main post",
+        "author": {"screen_name": "alice"},
+        "created_at": "2026-11-13T17:59:00Z",
+    })
+
+    assert reply is None
+    assert original is not None
