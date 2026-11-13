@@ -488,7 +488,8 @@ def main() -> None:
     webhook_url = f"{base_url}/telegram"
     secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 
-    application = (\n        Application.builder()\n        .token(TELEGRAM_BOT_TOKEN)\n        .post_init(_post_init)\n        .post_shutdown(_post_shutdown)\n        .build()\n    )
+    application = (
+        Application.builder()\n        .token(TELEGRAM_BOT_TOKEN)\n        .post_init(_post_init)\n        .post_shutdown(_post_shutdown)\n        .build()\n    )
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("project", project))
