@@ -334,7 +334,7 @@ def _process_post(db, post, handle: str, *, source: str, provider=None) -> str:
     try:
         # Scheduled-feed generation is bounded and does not use the SDK's long
         # automatic 429 retry backoff. Telegram feed delivery must not depend on Groq.
-        replies = generate_replies(post.text, request_timeout=15.0, max_retries=0)
+        replies = generate_replies(post.text, request_timeout=15.0, max_retries=0, usage_class="scheduled")
         if not replies or not validate_replies(replies):
             raise RuntimeError("Groq returned invalid reply suggestions")
         record_activity(db, "replies_suggested", handle, post.id, f"Three reply suggestions generated from {source}")
