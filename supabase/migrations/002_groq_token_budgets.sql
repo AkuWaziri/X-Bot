@@ -1,7 +1,7 @@
 -- Shared Groq daily token budgets across Render and GitHub Actions.
 create table if not exists public.groq_token_usage (
     usage_date date not null,
-    usage_class text not null check (usage_class in ('project', 'scheduled', 'emergency')),
+    usage_class text not null check (usage_class in ('project', 'scheduled', 'comments')),
     used_tokens bigint not null default 0,
     reserved_tokens bigint not null default 0,
     updated_at timestamptz not null default now(),
@@ -27,7 +27,7 @@ declare
     v_used bigint;
     v_reserved bigint;
 begin
-    if p_usage_class not in ('project', 'scheduled', 'emergency')
+    if p_usage_class not in ('project', 'scheduled', 'comments')
        or p_estimate <= 0 or p_daily_limit <= 0 then
         raise exception 'Invalid Groq budget reservation';
     end if;
