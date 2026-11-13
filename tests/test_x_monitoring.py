@@ -210,7 +210,7 @@ def test_monitored_pool_randomizes_full_account_list():
 
     assert len(selected) == 20
     assert set(selected) == set(accounts)
-    assert MONITORED_HANDLES_PER_RUN == 20
+    assert MONITORED_HANDLES_PER_RUN == 25
 
 
 def test_monitored_handles_randomly_change_between_schedules():
@@ -223,9 +223,9 @@ def test_monitored_handles_randomly_change_between_schedules():
     second = _select_rotating_handles(db, accounts)
     third = _select_rotating_handles(db, accounts)
 
-    assert len(first) == 20
-    assert len(second) == 20
-    assert len(third) == 20
+    assert len(first) == 25
+    assert len(second) == 25
+    assert len(third) == 25
     assert set(first).isdisjoint(second)
     assert set(second).isdisjoint(third)
     assert len(set(first + second + third)) >= 40
@@ -264,10 +264,10 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
 
     assert len(selected) == 20
     assert calls
-    assert calls[0][1] == 20
+    assert calls[0][1] == 25
 
 
-def test_monitored_handle_sends_every_qualifying_post_newest_first(monkeypatch):
+def test_monitored_handle_sends_only_newest_qualifying_post(monkeypatch):
     older_post = Post(
         id="older",
         text="older post",
@@ -298,7 +298,7 @@ def test_monitored_handle_sends_every_qualifying_post_newest_first(monkeypatch):
     result = _process_handle(object(), provider, "@alice", start, now)
 
     assert result == "sent"
-    assert processed == ["newest", "older"]
+    assert processed == ["newest"]
 
 def test_monitored_feed_skips_posts_without_blue_check(monkeypatch):
     unverified = Post(
@@ -582,7 +582,7 @@ def test_discovery_uses_ten_post_target(monkeypatch):
 
 
 def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypatch):
-    accounts = [f"@integration{i}" for i in range(20)]
+    accounts = [f"@integration{i}" for i in range(30)]
     db = IntegrationDB()
     sent_posts = []
     saved_replies = []
