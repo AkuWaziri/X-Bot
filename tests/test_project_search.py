@@ -205,13 +205,13 @@ def test_search_returns_only_newest_post_per_author():
     assert len({item.username.casefold() for item in results}) == len(results)
 
 
-def test_search_caps_results_at_100():
+def test_search_caps_results_at_35():
     now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
     provider = FakeProvider([post(str(i), i, now, username=f"author{i}") for i in range(120)])
 
     results = search_project_posts("some_project", limit=999, now=now, provider=provider)
 
-    assert len(results) == 100
+    assert len(results) == 35
 
 
 def test_search_raises_when_all_provider_queries_fail():
