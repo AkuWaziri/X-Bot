@@ -223,11 +223,11 @@ def _project_post_entry(index: int, post, replies: list[str] | None) -> str:
 async def _run_project_search(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
     chat_id = update.effective_chat.id
     label = query
-    logging.info("PROJECT SEARCH STARTED | query=%s | window_minutes=180 | limit=100", query)
+    logging.info("PROJECT SEARCH STARTED | query=%s | window_minutes=180 | limit=35", query)
     try:
         # Bound the user-facing wait even if a provider/library stalls unexpectedly.
         posts = await asyncio.wait_for(
-            asyncio.to_thread(search_project_posts, query, limit=100, window_minutes=180),
+            asyncio.to_thread(search_project_posts, query, limit=35, window_minutes=180),
             timeout=90,
         )
     except asyncio.TimeoutError:
