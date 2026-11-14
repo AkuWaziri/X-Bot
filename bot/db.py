@@ -11,7 +11,18 @@ def get_db() -> Client:
         raise RuntimeError("SUPABASE_URL is not configured")
     if not SUPABASE_SECRET_KEY:
         raise RuntimeError("SUPABASE_SECRET_KEY is not configured")
-    return create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
+    client = create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
+
+    # Supabase's new sb_secret_* keys are API keys, not JWTs. Send them
+    # through apikey only; do not present the opaque key as a Bearer JWT.
+    if SUPABASE_SECRET_KEY.startswith("sb_secret_"):
+        postgrest = getattr(client, "postgrest", None)
+        session = getattr(postgrest, "session", None)
+        headers = getattr(session, "headers", None)
+        if headers is not None:
+            headers.pop("Authorization", None)
+
+    return client
 
 
 
