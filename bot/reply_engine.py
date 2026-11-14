@@ -538,7 +538,7 @@ def _parse_reply_candidates(raw: str) -> list[str]:
             candidates = [tagged["R1"], tagged["R2"], tagged["R3"]]
 
     if len(candidates) != 3:
-        numbered_matches = list(re.finditer(r"(?<!\w)([123])[.)]\s*", text))
+        numbered_matches = list(re.finditer(r"(?im)^\s*(?:reply\s*)?([123])\s*[:.)-]\s*", text))
         if len(numbered_matches) >= 3:
             numbered = {}
             for index, match in enumerate(numbered_matches):
