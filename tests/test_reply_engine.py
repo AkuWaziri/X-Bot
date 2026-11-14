@@ -15,35 +15,19 @@ from bot.reply_engine import (
 
 
 class ReplyEngineTests(unittest.TestCase):
-    def test_generation_prompt_uses_dna_reference_before_task_instructions(self):
-        self.assertIn("human reply dna references (read both first)", SYSTEM_PROMPT.lower())
-        self.assertLess(
-            SYSTEM_PROMPT.index("HUMAN REPLY DNA REFERENCES"),
-            SYSTEM_PROMPT.index("TASK:"),
-        )
-        self.assertIn("human does not mean polished", SYSTEM_PROMPT.lower())
-        self.assertIn("most specific detail", SYSTEM_PROMPT.lower())
-        self.assertIn("do not use a canned phrase bank", SYSTEM_PROMPT.lower())
-        # Raw sample phrases stay out of the live prompt to reduce phrase-copying.
-        self.assertNotIn("this has alpha written all over it", SYSTEM_PROMPT.lower())
-        self.assertNotIn("curious to see what comes from this", SYSTEM_PROMPT.lower())
-        self.assertIn("20-100 characters", SYSTEM_PROMPT)
-        self.assertIn("casual fragment", SYSTEM_PROMPT.lower())
-        self.assertIn("zero questions is often better", SYSTEM_PROMPT.lower())
-        self.assertIn("copywriter writing three engagement comments", SYSTEM_PROMPT.lower())
-        self.assertIn("nice demo bro!", SYSTEM_PROMPT.lower())
-        self.assertIn("ai-powered workflows...", SYSTEM_PROMPT.lower())
-        self.assertIn("personal reaction, opinion, hope, concern", SYSTEM_PROMPT.lower())
-        self.assertIn("game changer", SYSTEM_PROMPT.lower())
-        self.assertIn("curious how...", SYSTEM_PROMPT.lower())
-        self.assertIn("wow, ai account managers", SYSTEM_PROMPT.lower())
-        self.assertIn("casual personal-reaction calibration", SYSTEM_PROMPT.lower())
-        self.assertIn("ngl, an ai agent handling trades on its own is intriguing", SYSTEM_PROMPT.lower())
-        self.assertIn("setting your own risk limits keeps control in your hands", SYSTEM_PROMPT.lower())
-        self.assertIn("an nft that pays you? real utility is a big win", SYSTEM_PROMPT.lower())
-        self.assertIn("casual does not mean deliberately broken", SYSTEM_PROMPT.lower())
-        self.assertIn("question mark must be the final character", SYSTEM_PROMPT.lower())
-        self.assertIn("zero questions is preferred", SYSTEM_PROMPT.lower())
+    def test_generation_prompt_is_compact_and_preserves_core_rules(self):
+        prompt = SYSTEM_PROMPT.lower()
+        self.assertIn("exactly three distinct, natural x replies", prompt)
+        self.assertIn("react to specific details", prompt)
+        self.assertIn("never invent facts or personal experience", prompt)
+        self.assertIn("avoid generic praise", prompt)
+        self.assertIn("at most one may be a question", prompt)
+        self.assertIn("em dashes", prompt)
+        self.assertIn("output exactly three lines", prompt)
+        self.assertLess(len(SYSTEM_PROMPT), 700)
+        # The long style reference and sample phrase bank stay out of the live prompt.
+        self.assertNotIn("this has alpha written all over it", prompt)
+        self.assertNotIn("curious to see what comes from this", prompt)
 
     def test_clean_reply_removes_tag_and_em_dash(self):
         self.assertEqual(
