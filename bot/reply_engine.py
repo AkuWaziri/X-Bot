@@ -464,15 +464,16 @@ COMBINED_REPLY_DNA = REPLY_DNA_REFERENCE
 
 
 SYSTEM_PROMPT = """Write exactly three distinct, natural X replies to the supplied post.
-React to specific details and preserve the post's meaning. Never invent facts or personal experience.
-Use casual, human wording; avoid generic praise, marketing language, and canned phrases.
-Vary the three replies. At most one may be a question, preferably none; any question mark must be final.
-Avoid: actually, feels like, feels off, this or that, and em dashes.
-Follow the requested character range. Output exactly three lines:
-R1: ...
-R2: ...
-R3: ...
-"""
+React to specific details; preserve meaning; never invent facts or personal experience.
+Use casual, human wording. Avoid generic praise, marketing language, canned phrases, and em dashes.
+Prefer short, specific statements or fragments. Do not ask questions or use question marks.
+Avoid the phrases: actually, feels like, feels off, this or that.
+Output exactly these three lines, with no intro, bullets, quotes, or extra text:
+R1: [reply]
+R2: [reply]
+R3: [reply]
+Each reply must meet the requested character range and be distinct."""
+
 
 def _clean_reply(reply: str) -> str:
     # X replies should read like normal human typing. Never allow em dashes
@@ -613,9 +614,9 @@ def generate_replies(
     replies: list[str] = []
     raw = ""
     validation_errors: list[str] = []
-    validation_attempts = max(1, min(2, int(os.getenv("GROQ_VALIDATION_ATTEMPTS", "1"))))
+    validation_attempts = max(1, min(2, int(os.getenv("GROQ_VALIDATION_ATTEMPTS", "2"))))
     for attempt in range(validation_attempts):
-        user_prompt = f"""POST TO REPLY TO:\n{post_text[:800]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Use a spontaneous personal voice when it fits (for example, a natural "ngl" or "tbh" opener), and prefer everyday wording over polished marketing labels like "game-changer" or "the biggest win". Keep grammar natural but do not over-polish the wording. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use no more than one question across all three, and prefer zero. Any question mark must be the final character of its reply. Avoid "actually", "feels like", "feels off", and "this or that" in the generated wording. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."""
+        user_prompt = f"""POST TO REPLY TO:\\n{post_text[:800]}\\n\\nWrite three believable, casual X replies. React to specific details in this post; do not summarize it or invent facts. Use short, natural statements or fragments, with varied wording and sentence shapes. Do not ask questions or use question marks. Avoid generic praise, marketing language, canned phrases, "actually", "feels like", "feels off", "this or that", and em dashes. Return exactly three labeled lines and nothing else: R1: [reply], R2: [reply], R3: [reply]. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters and distinct."""
         if attempt:
             feedback = "\n".join(f"- {error}" for error in validation_errors) or "- Follow the required three-line format exactly."
             user_prompt += (
@@ -630,8 +631,8 @@ def generate_replies(
             completion = _create_groq_completion(
                 client,
                 model=GROQ_MODEL,
-                temperature=1.0,
-                max_completion_tokens=160,
+                temperature=0.7,
+                max_completion_tokens=220,
                 reasoning_effort="low",
                 include_reasoning=False,
                 messages=[
