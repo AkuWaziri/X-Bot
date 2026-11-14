@@ -522,7 +522,7 @@ def _parse_reply_candidates(raw: str) -> list[str]:
     if not raw or raw.upper().strip() == "NO_REPLY":
         return []
 
-    text = raw.replace("\\r\\n", "\n").replace("\\n", "\n")
+    text = raw.replace("\\r\n", "\n").replace("\n", "\n")
     text = re.sub(r"```(?:text|markdown)?", "", text, flags=re.IGNORECASE).replace("```", "").strip()
     tagged_matches = list(re.finditer(r"(?<!\w)(R[123])\s*:\s*", text, flags=re.IGNORECASE))
     candidates: list[str] = []
@@ -616,7 +616,7 @@ def generate_replies(
     validation_errors: list[str] = []
     validation_attempts = max(1, min(2, int(os.getenv("GROQ_VALIDATION_ATTEMPTS", "2"))))
     for attempt in range(validation_attempts):
-        user_prompt = f"""POST TO REPLY TO:\\n{post_text[:800]}\\n\\nWrite three believable, casual X replies. React to specific details in this post; do not summarize it or invent facts. Use short, natural statements or fragments, with varied wording and sentence shapes. Do not ask questions or use question marks. Avoid generic praise, marketing language, canned phrases, "actually", "feels like", "feels off", "this or that", and em dashes. Return exactly three labeled lines and nothing else: R1: [reply], R2: [reply], R3: [reply]. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters and distinct."""
+        user_prompt = f"""POST TO REPLY TO:\n{post_text[:800]}\n\nWrite three believable, casual X replies. React to specific details in this post; do not summarize it or invent facts. Use short, natural statements or fragments, with varied wording and sentence shapes. Do not ask questions or use question marks. Avoid generic praise, marketing language, canned phrases, "actually", "feels like", "feels off", "this or that", and em dashes. Return exactly three labeled lines and nothing else: R1: [reply], R2: [reply], R3: [reply]. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters and distinct."""
         if attempt:
             feedback = "\n".join(f"- {error}" for error in validation_errors) or "- Follow the required three-line format exactly."
             user_prompt += (
