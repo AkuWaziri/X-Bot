@@ -616,7 +616,7 @@ def generate_replies(
     validation_errors: list[str] = []
     validation_attempts = max(1, min(2, int(os.getenv("GROQ_VALIDATION_ATTEMPTS", "2"))))
     for attempt in range(validation_attempts):
-        user_prompt = f"""POST TO REPLY TO:\n{post_text[:800]}\n\nWrite three believable, casual X replies. React to specific details in this post; do not summarize it or invent facts. Use short, natural statements or fragments, with varied wording and sentence shapes. Do not ask questions or use question marks. Avoid generic praise, marketing language, canned phrases, "actually", "feels like", "feels off", "this or that", and em dashes. Return exactly three labeled lines and nothing else: R1: [reply], R2: [reply], R3: [reply]. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters and distinct."""
+        user_prompt = f"""POST TO REPLY TO:\n{post_text[:800]}\n\nWrite three believable, casual X replies. React to specific details in this post; do not summarize it or invent facts. Use short, natural statements or fragments, with varied wording and sentence shapes. Do not ask questions or use question marks. Avoid generic praise, marketing language, canned phrases, "actually", "feels like", "feels off", "this or that", and em dashes. Return exactly three labeled lines and nothing else:\\nR1: [reply]\\nR2: [reply]\\nR3: [reply]. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters and distinct."""
         if attempt:
             feedback = "\n".join(f"- {error}" for error in validation_errors) or "- Follow the required three-line format exactly."
             user_prompt += (
