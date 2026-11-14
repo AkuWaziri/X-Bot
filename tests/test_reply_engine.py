@@ -21,9 +21,9 @@ class ReplyEngineTests(unittest.TestCase):
         self.assertIn("react to specific details", prompt)
         self.assertIn("never invent facts or personal experience", prompt)
         self.assertIn("avoid generic praise", prompt)
-        self.assertIn("at most one may be a question", prompt)
+        self.assertIn("do not ask questions or use question marks", prompt)
         self.assertIn("em dashes", prompt)
-        self.assertIn("output exactly three lines", prompt)
+        self.assertIn("output exactly these three lines", prompt)
         self.assertLess(len(SYSTEM_PROMPT), 700)
         # The long style reference and sample phrase bank stay out of the live prompt.
         self.assertNotIn("this has alpha written all over it", prompt)
@@ -78,6 +78,14 @@ R3: curious where this goes once more people try it"""
     def test_parse_accepts_markdown_fenced_replies(self):
         raw = "```text\\nR1: this rollout really gives users something useful\\nR2: the wallet flow is the detail i noticed first\\nR3: curious where this goes once more people try it\\n```"
         self.assertEqual(len(_parse_replies(raw)), 3)
+
+    def test_parser_accepts_reply_number_colon_labels(self):
+        from bot.reply_engine import _parse_reply_candidates
+
+        raw = """Reply 1: the wallet flow is the detail i noticed first
+2: shipping this update without extra steps is a good move
+Reply 3: keeping the setup simple should help new users"""
+        self.assertEqual(len(_parse_reply_candidates(raw)), 3)
 
     def test_short_reply_is_rejected(self):
         self.assertFalse(validate_reply("lol"))
