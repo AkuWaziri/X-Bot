@@ -22,9 +22,10 @@ def diagnose_supabase_connection() -> None:
     key_kind = "sb_secret" if key.startswith("sb_secret_") else (
         "legacy_jwt" if key.startswith("eyJ") else ("other" if key else "missing")
     )
-    logger.warning(
-        "SUPABASE DIAGNOSTIC | url_configured=%s | secret_key_configured=%s | key_kind=%s | key_length=%d",
-        bool(SUPABASE_URL), bool(key), key_kind, len(key),
+    print(
+        "SUPABASE DIAGNOSTIC | url_configured=%s | secret_key_configured=%s | key_kind=%s | key_length=%d"
+        % (bool(SUPABASE_URL), bool(key), key_kind, len(key)),
+        flush=True,
     )
     try:
         db = get_db()
@@ -39,9 +40,10 @@ def diagnose_supabase_connection() -> None:
             if value.startswith("eyJ"):
                 return "legacy_jwt"
             return "other" if value else "missing"
-        logger.warning(
-            "SUPABASE DIAGNOSTIC HEADERS | apikey_present=%s | apikey_kind=%s | authorization_present=%s | authorization_kind=%s",
-            bool(api_key_header), key_type(api_key_header), bool(auth_header), key_type(auth_value),
+        print(
+            "SUPABASE DIAGNOSTIC HEADERS | apikey_present=%s | apikey_kind=%s | authorization_present=%s | authorization_kind=%s"
+            % (bool(api_key_header), key_type(api_key_header), bool(auth_header), key_type(auth_value)),
+            flush=True,
         )
         result = db.table("owned_posts").select("post_id").limit(1).execute()
         logger.warning("SUPABASE DIAGNOSTIC READ | table=owned_posts | success=true | rows=%d", len(result.data or []))
