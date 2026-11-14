@@ -463,54 +463,17 @@ REPLY_DNA_REFERENCE = _load_reply_dna_reference()
 COMBINED_REPLY_DNA = REPLY_DNA_REFERENCE
 
 
-SYSTEM_PROMPT = f"""HUMAN REPLY DNA REFERENCES (READ BOTH FIRST):
-{COMBINED_REPLY_DNA}
-
-TASK:
-Write exactly three distinct, natural X replies to the supplied post. Sound like a real person reacting to THIS post, not an engagement bot.
-
-FIRST, silently identify the post's subject, its most specific detail (number, claim, feature, event, joke, concern, or wording), and its tone. Every reply must react to something concrete in the post. Do not simply paraphrase it or invent experience, knowledge, outcomes, or facts.
-
-MAKE THE OPTIONS GENUINELY DIFFERENT:
-- Give three reactions that a person might actually type in a live conversation. They do not need to sound like three carefully written mini-comments.
-- Vary effort and rhythm: one quick casual reaction, one specific observation, and one fragment or useful question when warranted.
-- At least TWO must be statements/reactions. Use NO MORE THAN ONE question across all three options; zero questions is preferred, and zero questions is often better.
-- Do not add a question mark just to create engagement. Most reply sets should contain no questions.
-- Never put a question mark in the middle of a sentence. If a reply is a question, its question mark must be the final character.
-- Avoid the words/phrases "actually", "feels like", "feels off", and "this or that" in generated replies. Choose direct, concrete wording instead. Do not automatically append "what do you think?" or "how does that work?"
-- Do not add praise before a question as a default opening. Avoid the polished engagement-bot pattern of compliment + follow-up question.
-- Fragments are valid. A reply can be a short observation or unfinished thought when its meaning is clear from the post.
-- Do not force all three replies into subject + verb + explanation. Avoid three complete, balanced, grammatically polished sentences.
-- R1, R2, and R3 have no fixed roles. No forced question in option 3.
-- React to an actual detail, but do not restate the entire post or turn every detail into an analytical observation.
-
-VOICE:
-- Sound like someone replying on X, not a copywriter writing three engagement comments.
-- Casual language such as "bro", "ngl", "tbh", "fr", "rn", "imo", "lmk", and "idk" is allowed when it fits; do not insert slang mechanically.
-- Lowercase starts, contractions, fragments, loose punctuation, and abrupt phrasing are welcome. Do not deliberately add typos.
-- Prefer a casual, direct reaction or personal stance over polished commentary. State what you think, like, doubt, hope, or worry about in plain words when the post invites it.
-- Use natural personal openers such as "ngl", "tbh", or "imo" when they genuinely fit; they should sound like the author's spontaneous reaction, not a required decoration.
-- Prefer everyday wording such as "this is intriguing", "keeps control in your hands", or "a big win" over inflated labels like "game-changer" or "the biggest win". Keep grammar natural while allowing casual fragments and loose punctuation.
-- Avoid default promotional labels such as "game changer", "incredible innovation", "promising", and "exciting" unless the wording genuinely fits and adds something specific.
-- Avoid "curious how..." as a substitute for a real opinion or concern. If the post raises a concern, express the concern directly; if it inspires hope, say what you hope happens.
-- Prefer a fragment or observation over dressing every thought up as a complete question.
-- A reply does not need to sound impressive or insightful. It needs to sound like a believable personal reaction.
-- Avoid stock lines like "this is exciting", "curious to see where this goes", "finally a platform", "love seeing this", "the ecosystem looks promising", or "this could be big" unless a specific detail makes that exact response apt.
-- Do not invent personal experience or imply product usage the post does not establish.
-- Do not make all three options questions, compliments, or generic observations.
-- Examples below describe voice only. Do not copy them mechanically.
-
-Account voice examples:
-{STYLE_EXAMPLES}
-
-Do not use a canned phrase bank. Build each reply from the exact wording and meaning of this post, but keep the wording conversational. Do not polish fragments into formal sentences or add a question just to make the reply feel complete.
-
-Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, including spaces and punctuation. No em dash.
-Return exactly three lines:
-R1: reply
-R2: reply
-R3: reply
+SYSTEM_PROMPT = """Write exactly three distinct, natural X replies to the supplied post.
+React to specific details and preserve the post's meaning. Never invent facts or personal experience.
+Use casual, human wording; avoid generic praise, marketing language, and canned phrases.
+Vary the three replies. At most one may be a question, preferably none; any question mark must be final.
+Avoid: actually, feels like, feels off, this or that, and em dashes.
+Follow the requested character range. Output exactly three lines:
+R1: ...
+R2: ...
+R3: ...
 """
+
 def _clean_reply(reply: str) -> str:
     # X replies should read like normal human typing. Never allow em dashes
     # through, even if the model ignores the instruction in the prompt.
@@ -644,14 +607,15 @@ def generate_replies(
         client_options["timeout"] = request_timeout
     if max_retries is not None:
         client_options["max_retries"] = max_retries
+    client_options["max_retries"] = 0 if max_retries is None else max_retries
     client = Groq(**client_options)
 
     replies: list[str] = []
     raw = ""
     validation_errors: list[str] = []
-    validation_attempts = max(1, min(3, int(os.getenv("GROQ_VALIDATION_ATTEMPTS", "2"))))
+    validation_attempts = max(1, min(2, int(os.getenv("GROQ_VALIDATION_ATTEMPTS", "1"))))
     for attempt in range(validation_attempts):
-        user_prompt = f"""POST TO REPLY TO:\n{post_text[:1200]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Use a spontaneous personal voice when it fits (for example, a natural "ngl" or "tbh" opener), and prefer everyday wording over polished marketing labels like "game-changer" or "the biggest win". Keep grammar natural but do not over-polish the wording. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use no more than one question across all three, and prefer zero. Any question mark must be the final character of its reply. Avoid "actually", "feels like", "feels off", and "this or that" in the generated wording. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."""
+        user_prompt = f"""POST TO REPLY TO:\n{post_text[:800]}\n\nWrite three believable, casual X replies. Keep them post-specific but do not over-explain or polish them into mini-essays. Let the replies express natural personal reactions, opinions, hopes, concerns, or observations where appropriate. Use a spontaneous personal voice when it fits (for example, a natural "ngl" or "tbh" opener), and prefer everyday wording over polished marketing labels like "game-changer" or "the biggest win". Keep grammar natural but do not over-polish the wording. Prefer plain statements over promotional labels or polished "curious how..." questions. Let at least two sound like natural statements/reactions or fragments; use no more than one question across all three, and prefer zero. Any question mark must be the final character of its reply. Avoid "actually", "feels like", "feels off", and "this or that" in the generated wording. Vary sentence shape and length. No generic praise, canned phrases, forced questions, or invented claims. Return exactly R1, R2 and R3. Each reply must be {MIN_REPLY_CHARS}-{MAX_REPLY_CHARS} characters, distinct, and contain no em dash."""
         if attempt:
             feedback = "\n".join(f"- {error}" for error in validation_errors) or "- Follow the required three-line format exactly."
             user_prompt += (
@@ -667,7 +631,7 @@ def generate_replies(
                 client,
                 model=GROQ_MODEL,
                 temperature=1.0,
-                max_completion_tokens=256,
+                max_completion_tokens=160,
                 reasoning_effort="low",
                 include_reasoning=False,
                 messages=[
@@ -718,7 +682,7 @@ def generate_replies(
 
     if validation_errors:
         raise RuntimeError(
-            "Groq returned replies that failed style validation after 3 attempts: "
+            f"Groq returned replies that failed style validation after {validation_attempts} attempt(s): "
             + "; ".join(validation_errors)
         )
 
