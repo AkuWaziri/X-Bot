@@ -536,13 +536,14 @@ def run_monitor_cycle() -> None:
     now = datetime.now(timezone.utc)
     schedule_start = _schedule_start(now)
     test_mode = os.getenv("TEST_MODE", "").strip().lower() == "true"
+    force_manual_run = os.getenv("FORCE_MANUAL_RUN", "").strip().lower() == "true"
     in_grace = _within_schedule_grace(now, schedule_start)
 
     # GitHub scheduled events can be delayed well beyond their cron minute.
     # Recover the latest unprocessed slot instead of silently dropping the feed.
     # The fixed slot window below still prevents scanning older missed windows.
-    if _schedule_already_processed(db, schedule_start):
-        if not test_mode and not in_grace:
+    if not force_manual_run and _schedule_already_processed(db, schedule_start):
+        if not test_mode and not force_manual_run and not in_grace:
             logger.warning(
                 "LATE SCHEDULE RETRY | slot already processed | now=%s | slot=%s",
                 now.isoformat(),
