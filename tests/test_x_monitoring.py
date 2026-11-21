@@ -755,6 +755,33 @@ def test_schedule_start_rejects_invalid_date_bound_slot(monkeypatch):
     assert _schedule_start(now) == datetime(2026, 11, 21, 11, 0, tzinfo=timezone.utc)
 
 
+def test_force_manual_run_bypasses_processed_slot_and_stale_window(monkeypatch):
+    from bot.monitor import _mark_schedule_processed
+
+    db = IntegrationDB()
+    called = []
+    now = datetime(2026, 11, 21, 20, 45, tzinfo=timezone.utc)
+    _mark_schedule_processed(db, datetime(2026, 11, 21, 20, 0, tzinfo=timezone.utc))
+
+    monkeypatch.delenv("TEST_MODE", raising=False)
+    monkeypatch.delenv("SCHEDULE_SLOT", raising=False)
+    monkeypatch.setenv("FORCE_MANUAL_RUN", "true")
+    monkeypatch.setattr("bot.monitor.load_accounts", lambda: ["@alice"])
+    monkeypatch.setattr("bot.monitor.get_x_provider", lambda: object())
+    monkeypatch.setattr("bot.monitor.get_db", lambda: db)
+    monkeypatch.setattr("bot.monitor.datetime", type("FixedDateTime", (datetime,), {
+        "now": classmethod(lambda cls, tz=None: now)
+    }))
+    monkeypatch.setattr("bot.monitor._select_rotating_handles", lambda *args: called.append("handles") or ["@alice"])
+    monkeypatch.setattr("bot.monitor._process_handle", lambda *args, **kwargs: "skipped")
+    monkeypatch.setattr("bot.monitor._run_discovery", lambda *args: called.append("discovery") or (0, False))
+
+    run_monitor_cycle()
+
+    assert called == ["handles", "discovery"]
+    assert any(item.get("event_type") == "scan_checkpoint" for item in db.activities)
+
+
 def test_stale_scheduled_run_is_skipped_without_scanning(monkeypatch):
     db = IntegrationDB()
     called = []
