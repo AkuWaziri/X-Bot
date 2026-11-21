@@ -140,6 +140,22 @@ def _notify_comment(db, bot, loop, comment, root_post_id: str) -> bool:
     return True
 
 
+def _search_comments_or_skip(provider):
+    """Return None for FxTwitter search outages so the next scan can retry."""
+    try:
+        return provider.search_replies(COMMENT_SEARCH_QUERY, limit=COMMENT_SEARCH_LIMIT)
+    except RuntimeError as exc:
+        error = str(exc)
+        if "HTTP 503" not in error and "API error 503" not in error:
+            raise
+        logger.warning(
+            "OWN POST COMMENT SEARCH UNAVAILABLE | provider=fxtwitter | status=503 | "
+            "scan_skipped=true | retry_on_next_interval | error=%s",
+            error[:350],
+        )
+        return None
+
+
 def scan_owned_post_comments(bot, loop) -> dict[str, int]:
     """Scan replies addressed to @akuwazir and keep only threads rooted at our posts."""
     if not TELEGRAM_CHAT_ID:
@@ -161,7 +177,11 @@ def scan_owned_post_comments(bot, loop) -> dict[str, int]:
         OWNER_HANDLE, len(own_posts), len(owned_ids), len(newly_seen),
     )
 
-    comments = provider.search_replies(COMMENT_SEARCH_QUERY, limit=COMMENT_SEARCH_LIMIT)
+    comments = _search_comments_or_skip(provider)
+    if comments is None:
+        # Do not process or mark any comments during an incomplete search.
+        # The monitor loop will retry naturally at the next interval.
+        return {"found": 0, "delivered": 0, "skipped": 0, "deferred": 0}
     delivered = 0
     skipped = 0
     deferred = 0
