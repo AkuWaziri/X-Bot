@@ -833,6 +833,26 @@ def test_discovery_falls_back_to_twscrape_on_fxtwitter_503(monkeypatch):
     assert len(fallback_queries) == len(DISCOVERY_TOPICS)
 
 
+def test_twscrape_search_converts_http_403_to_blocked_error(monkeypatch):
+    from bot.x import twscrape
+    from bot.x.twscrape import TwscrapeBlockedError, TwscrapeProvider
+
+    provider = object.__new__(TwscrapeProvider)
+
+    def blocked_run(coro):
+        coro.close()
+        raise RuntimeError("HttpStatusError: 403 Forbidden")
+
+    monkeypatch.setattr(twscrape.asyncio, "run", blocked_run)
+
+    try:
+        provider.search_posts("privacy", limit=20)
+    except TwscrapeBlockedError:
+        pass
+    else:
+        raise AssertionError("HTTP 403 must be classified as a blocked session")
+
+
 def test_discovery_stops_all_topics_after_twscrape_is_blocked(monkeypatch):
     from bot.x.twscrape import TwscrapeBlockedError
 
