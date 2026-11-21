@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import logging
 import re
+import unicodedata
 
 from bot.x.base import Post
 from bot.x.provider import get_x_provider
@@ -13,7 +14,7 @@ SEARCH_WINDOW_MINUTES = 180
 
 def normalize_handle(value: str) -> str:
     """Normalize an X handle or preserve a free-text project/topic query."""
-    query = " ".join(str(value or "").strip().split())
+    query = unicodedata.normalize("NFC", " ".join(str(value or "").strip().split()))
     if not query:
         raise ValueError("Enter an X handle or search words, e.g. /project primus_labs or /project tokenized stocks")
     if query.startswith(("https://x.com/", "https://twitter.com/")):
@@ -25,8 +26,15 @@ def normalize_handle(value: str) -> str:
         raise ValueError("For an X handle, use letters, numbers, and underscores only.")
     if HANDLE_RE.fullmatch(query):
         return query
-    if len(query) > 100 or len(query) < 2 or not re.search(r"[A-Za-z0-9]", query):
-        raise ValueError("Search words must be 2–100 characters and include letters or numbers.")
+    # Accept letters and numbers from every Unicode writing system, including
+    # Hausa characters (ƙ, ɗ, ɓ), Hangul, Han, Arabic, Cyrillic, and others.
+    # NFC keeps canonically equivalent spellings consistent without translating
+    # or transliterating the user's search term.
+    has_unicode_letter_or_number = any(
+        unicodedata.category(char)[0] in {"L", "N"} for char in query
+    )
+    if len(query) > 100 or len(query) < 1 or not has_unicode_letter_or_number:
+        raise ValueError("Search words must be 1–100 characters and include letters or numbers.")
     return query
 
 
