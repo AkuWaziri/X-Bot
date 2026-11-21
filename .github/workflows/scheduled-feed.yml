@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       run_mode:
-        description: "Use test for a short smoke test or production for a scheduled feed slot"
+        description: "Use test for a smoke test, production for a scheduled slot, or force for a fresh manual feed cycle"
         required: true
         type: choice
         options:
           - test
           - production
+          - force
         default: test
       schedule_slot:
         description: "UTC slot timestamp, e.g. 2026-11-21T11:00Z (required for production)"
@@ -30,7 +31,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 60 }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode == 'test' && 15 || 60 }}
     env:
       PYTHONPATH: .
     steps:
@@ -63,7 +64,9 @@ jobs:
           # Production workflow_dispatch must pass an exact UTC slot timestamp.
           SCHEDULE_SLOT: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode == 'production' && inputs.schedule_slot || '' }}
           # Manual dispatch defaults to a smoke test; external production dispatch opts in explicitly.
-          TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode != 'production' && 'true' || 'false' }}
+          TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode == 'test' && 'true' || 'false' }}
+          # Force runs scan a fresh feed window even if this schedule slot was already processed.
+          FORCE_MANUAL_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode == 'force' && 'true' || 'false' }}
           TEST_WINDOW_MINUTES: "10"
         run: python -m bot.monitor
 
