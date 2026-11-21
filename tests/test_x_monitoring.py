@@ -731,3 +731,45 @@ def test_schedule_start_uses_latest_wat_slot():
 def test_schedule_start_before_first_slot_uses_previous_day_last_slot():
     now = datetime(2026, 10, 25, 9, 30, tzinfo=timezone.utc)
     assert _schedule_start(now) == datetime(2026, 10, 24, 20, 0, tzinfo=timezone.utc)
+
+
+
+def test_schedule_start_accepts_date_bound_utc_slot(monkeypatch):
+    from bot.monitor import _schedule_start
+
+    monkeypatch.delenv("TEST_MODE", raising=False)
+    monkeypatch.setenv("SCHEDULE_SLOT", "2026-11-21T11:00Z")
+    now = datetime(2026, 11, 22, 1, 30, tzinfo=timezone.utc)
+
+    assert _schedule_start(now) == datetime(2026, 11, 21, 11, 0, tzinfo=timezone.utc)
+
+
+def test_schedule_start_rejects_invalid_date_bound_slot(monkeypatch):
+    from bot.monitor import _schedule_start
+
+    monkeypatch.delenv("TEST_MODE", raising=False)
+    monkeypatch.setenv("SCHEDULE_SLOT", "2026-11-21T13:00Z")
+    now = datetime(2026, 11, 21, 11, 5, tzinfo=timezone.utc)
+
+    assert _schedule_start(now) == datetime(2026, 11, 21, 11, 0, tzinfo=timezone.utc)
+
+
+def test_stale_scheduled_run_is_skipped_without_scanning(monkeypatch):
+    db = IntegrationDB()
+    called = []
+
+    monkeypatch.delenv("TEST_MODE", raising=False)
+    monkeypatch.delenv("SCHEDULE_SLOT", raising=False)
+    monkeypatch.setattr("bot.monitor.load_accounts", lambda: ["@alice"])
+    monkeypatch.setattr("bot.monitor.get_x_provider", lambda: object())
+    monkeypatch.setattr("bot.monitor.get_db", lambda: db)
+    monkeypatch.setattr("bot.monitor.datetime", type("FixedDateTime", (datetime,), {
+        "now": classmethod(lambda cls, tz=None: datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc))
+    }))
+    monkeypatch.setattr("bot.monitor._select_rotating_handles", lambda *args: called.append("handles") or ["@alice"])
+    monkeypatch.setattr("bot.monitor._run_discovery", lambda *args: called.append("discovery") or (0, False))
+
+    run_monitor_cycle()
+
+    assert called == []
+    assert not any(item.get("event_type") == "schedule_processed" for item in db.activities)
