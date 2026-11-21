@@ -558,7 +558,7 @@ def test_schedule_marker_is_written_only_after_successful_cycle(monkeypatch):
     assert not any(item["event_type"] == "scan_checkpoint" for item in db.activities)
 
 
-def test_discovery_uses_ten_post_target(monkeypatch):
+def test_discovery_uses_twenty_five_post_target(monkeypatch):
     accounts = [f"@integration{i}" for i in range(20)]
     db = IntegrationDB()
     captured = []
@@ -578,7 +578,7 @@ def test_discovery_uses_ten_post_target(monkeypatch):
 
     run_monitor_cycle()
 
-    assert captured == [MAX_DISCOVERY_POSTS_PER_RUN] == [10]
+    assert captured == [MAX_DISCOVERY_POSTS_PER_RUN] == [25]
 
 
 def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypatch):
@@ -612,9 +612,9 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     monitored_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-integration")]
     discovery_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-discovery-")]
 
-    assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN
-    assert len(discovery_posts) == MAX_DISCOVERY_POSTS_PER_RUN
-    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + MAX_DISCOVERY_POSTS_PER_RUN
+    assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN == 15
+    assert len(discovery_posts) == MAX_DISCOVERY_POSTS_PER_RUN == 25
+    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + MAX_DISCOVERY_POSTS_PER_RUN == 40
     assert len(saved_replies) == len(telegram_posts)
     assert any(item["event_type"] == "scan_checkpoint" for item in db.activities)
     assert not any(item["event_type"] == "error" for item in db.activities)
