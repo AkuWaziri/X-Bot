@@ -83,3 +83,36 @@ def test_remember_owned_posts_deduplicates_conflict_keys_before_upsert():
     assert db.table_instance.conflict == "post_id"
     assert [row["post_id"] for row in db.table_instance.rows] == ["post-1", "post-2"]
     assert db.table_instance.rows[0]["post_text"] == "newest copy"
+
+
+def test_temporary_fxtwitter_503_skips_comment_search_and_logs_warning(caplog):
+    import logging
+    from bot.comment_monitor import _search_comments_or_skip
+
+    class UnavailableProvider:
+        def search_replies(self, query, limit):
+            assert query == "to:akuwazir"
+            assert limit == 100
+            raise RuntimeError(
+                'FxTwitter provider request failed: HTTP 503: '
+                '{"message":"X/Twitter search is unavailable"}'
+            )
+
+    with caplog.at_level(logging.WARNING, logger="bot.comment_monitor"):
+        result = _search_comments_or_skip(UnavailableProvider())
+
+    assert result is None
+    assert "OWN POST COMMENT SEARCH UNAVAILABLE" in caplog.text
+    assert "retry_on_next_interval" in caplog.text
+
+
+def test_non_503_comment_search_errors_are_not_suppressed():
+    import pytest
+    from bot.comment_monitor import _search_comments_or_skip
+
+    class FailedProvider:
+        def search_replies(self, query, limit):
+            raise RuntimeError("FxTwitter provider request failed: HTTP 401: unauthorized")
+
+    with pytest.raises(RuntimeError, match="HTTP 401"):
+        _search_comments_or_skip(FailedProvider())
