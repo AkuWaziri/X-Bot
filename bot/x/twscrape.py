@@ -168,6 +168,10 @@ class TwscrapeProvider(XProvider):
         try:
             return asyncio.run(self._search(query, limit))
         except Exception as exc:
+            if self._is_blocked_error(exc):
+                raise TwscrapeBlockedError(
+                    f"X blocked the twscrape search session (403/Cloudflare): {exc}"
+                ) from exc
             raise RuntimeError(f"Twscrape provider failed: {exc}") from exc
         finally:
             _SEARCH_LOCK.release()
