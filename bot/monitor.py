@@ -15,9 +15,9 @@ from bot.x.base import is_reply_payload
 
 logger = logging.getLogger(__name__)
 
-# Production feed allocation per scheduled run: 20 monitored handles + up to 10 topic-discovery posts.
-MONITORED_HANDLES_PER_RUN = 25
-MAX_DISCOVERY_POSTS_PER_RUN = 10
+# Production feed allocation per scheduled run: up to 15 monitored handles + 25 topic-discovery posts.
+MONITORED_HANDLES_PER_RUN = 15
+MAX_DISCOVERY_POSTS_PER_RUN = 25
 DISCOVERY_CANDIDATE_POOL_SIZE = 50
 # Three daily feed cycles aligned with 12:00, 17:00 and 21:00 WAT.
 # WAT is UTC+1, so the corresponding UTC slots are 11:00, 16:00 and 20:00.
