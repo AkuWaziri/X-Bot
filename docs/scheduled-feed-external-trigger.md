@@ -1,55 +1,179 @@
 # Reliable scheduled-feed triggering
 
-The scheduled-feed workflow keeps GitHub's cron triggers as a backup, but GitHub-hosted cron is best-effort and is not a punctual scheduler. Configure an external HTTP scheduler as the primary trigger.
+Use the existing X-Bot Supabase project as the primary scheduler. Supabase Cron runs inside Postgres on UTC schedules and can make HTTP requests. This avoids relying on GitHub's best-effort scheduled events and avoids placing a GitHub token in a third-party cron service.
 
-## Daily UTC schedule
+GitHub's scheduled workflow remains a backup, offset from the top of the hour.
 
-Nigeria uses WAT (UTC+1). Create three recurring HTTP POST jobs:
+## Daily feed slots
 
-| WAT | UTC | `schedule_slot` |
+Nigeria uses WAT (UTC+1). Create three Supabase Cron jobs:
+
+| WAT | UTC | GitHub `schedule_slot` |
 | --- | --- | --- |
 | 12:00 | 11:00 | `11:00` |
 | 17:00 | 16:00 | `16:00` |
 | 21:00 | 20:00 | `20:00` |
 
-Use the UTC timezone in the external scheduler. Trigger each job at the listed UTC time. A trigger arriving more than 20 minutes after its slot is intentionally skipped; it will not send an old feed in the middle of the night.
+Supabase Cron schedules below are UTC. The GitHub dispatch includes the slot time, and the monitor skips it if it arrives more than 20 minutes late.
 
-## GitHub API request
+## 1. Create a fine-grained GitHub token
 
-Configure each external job to send an HTTP POST to:
+Create a fine-grained personal access token restricted to the `AkuWaziri/X-Bot` repository. Grant only:
 
-`https://api.github.com/repos/AkuWaziri/X-Bot/actions/workflows/scheduled-feed.yml/dispatches`
+- Repository permissions → Actions → Read and write
 
-Headers:
+Do not grant Contents, Administration, or other permissions. Keep the token private.
 
-- `Accept: application/vnd.github+json`
-- `Authorization: Bearer <fine-grained-token>`
-- `X-GitHub-Api-Version: 2022-11-28`
-- `Content-Type: application/json`
+## 2. Store the token in Supabase Vault
 
-Request body for the 12:00 WAT job:
+In the Supabase Dashboard for the database already used by X-Bot:
 
-```json
-{
-  "ref": "main",
-  "inputs": {
-    "run_mode": "production",
-    "schedule_slot": "11:00"
-  }
-}
+1. Open Database → Vault.
+2. Add a secret with the name `xbot_github_actions_token`.
+3. Paste the GitHub token as the secret value and save it.
+4. Do not paste the token into this document, SQL snippets, GitHub files, or chat.
+
+Vault encrypts secrets at rest. Note that Supabase's `pg_net` temporarily queues decrypted request headers until it sends the HTTP request; database login roles with access to the queue can read queued headers. Restrict database access accordingly.
+
+## 3. Enable required extensions
+
+In Database → Extensions, ensure these extensions are enabled:
+
+- `pg_cron`
+- `pg_net`
+- Supabase Vault (usually already enabled)
+
+Do not drop or recreate extensions that are already installed.
+
+## 4. Create the three scheduled jobs
+
+Run this SQL in the Supabase SQL Editor. It does not contain the GitHub token; each run reads it from Vault.
+
+```sql
+-- 12:00 WAT / 11:00 UTC
+select cron.schedule(
+  'xbot-feed-1200-wat',
+  '0 11 * * *',
+  $job$
+  select net.http_post(
+    url := 'https://api.github.com/repos/AkuWaziri/X-Bot/actions/workflows/scheduled-feed.yml/dispatches',
+    headers := jsonb_build_object(
+      'Accept', 'application/vnd.github+json',
+      'Authorization', 'Bearer ' || (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'xbot_github_actions_token'
+      ),
+      'X-GitHub-Api-Version', '2022-11-28',
+      'Content-Type', 'application/json'
+    ),
+    body := jsonb_build_object(
+      'ref', 'main',
+      'inputs', jsonb_build_object(
+        'run_mode', 'production',
+        'schedule_slot', '11:00'
+      )
+    ),
+    timeout_milliseconds := 10000
+  ) as request_id;
+  $job$
+);
+
+-- 17:00 WAT / 16:00 UTC
+select cron.schedule(
+  'xbot-feed-1700-wat',
+  '0 16 * * *',
+  $job$
+  select net.http_post(
+    url := 'https://api.github.com/repos/AkuWaziri/X-Bot/actions/workflows/scheduled-feed.yml/dispatches',
+    headers := jsonb_build_object(
+      'Accept', 'application/vnd.github+json',
+      'Authorization', 'Bearer ' || (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'xbot_github_actions_token'
+      ),
+      'X-GitHub-Api-Version', '2022-11-28',
+      'Content-Type', 'application/json'
+    ),
+    body := jsonb_build_object(
+      'ref', 'main',
+      'inputs', jsonb_build_object(
+        'run_mode', 'production',
+        'schedule_slot', '16:00'
+      )
+    ),
+    timeout_milliseconds := 10000
+  ) as request_id;
+  $job$
+);
+
+-- 21:00 WAT / 20:00 UTC
+select cron.schedule(
+  'xbot-feed-2100-wat',
+  '0 20 * * *',
+  $job$
+  select net.http_post(
+    url := 'https://api.github.com/repos/AkuWaziri/X-Bot/actions/workflows/scheduled-feed.yml/dispatches',
+    headers := jsonb_build_object(
+      'Accept', 'application/vnd.github+json',
+      'Authorization', 'Bearer ' || (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'xbot_github_actions_token'
+      ),
+      'X-GitHub-Api-Version', '2022-11-28',
+      'Content-Type', 'application/json'
+    ),
+    body := jsonb_build_object(
+      'ref', 'main',
+      'inputs', jsonb_build_object(
+        'run_mode', 'production',
+        'schedule_slot', '20:00'
+      )
+    ),
+    timeout_milliseconds := 10000
+  ) as request_id;
+  $job$
+);
 ```
 
-For the 17:00 WAT job, use `"schedule_slot": "16:00"`; for the 21:00 WAT job, use `"schedule_slot": "20:00"`.
+The job names are stable. Running the same `cron.schedule` statements again updates the existing jobs with those names instead of creating duplicate named jobs.
 
-Create a fine-grained GitHub personal access token restricted to this repository, with **Actions: Read and write** permission. Store it only in the external scheduler's secret/header store. Do not put the token in this repository, workflow YAML, or chat.
+## 5. Verify the schedules
+
+Check that all three jobs are active:
+
+```sql
+select jobid, jobname, schedule, active
+from cron.job
+where jobname in (
+  'xbot-feed-1200-wat',
+  'xbot-feed-1700-wat',
+  'xbot-feed-2100-wat'
+)
+order by jobname;
+```
+
+After a scheduled time, inspect recent runs:
+
+```sql
+select j.jobname, r.status, r.start_time, r.end_time, r.return_message
+from cron.job_run_details r
+join cron.job j on j.jobid = r.jobid
+where j.jobname like 'xbot-feed-%'
+order by r.start_time desc
+limit 12;
+```
+
+A successful `pg_net` enqueue is not itself proof that GitHub accepted the dispatch. Confirm each corresponding run in GitHub Actions and inspect the monitor logs. GitHub's workflow dispatch API normally returns HTTP 204 when accepted.
 
 ## Operational behavior
 
-- The existing manual **Run workflow** action remains a short smoke test by default.
-- Only an explicit `run_mode=production` dispatch runs the production feed cycle.
-- Production dispatches must include the matching UTC slot.
-- GitHub cron remains a backup, offset from the top of the hour.
-- Duplicate triggers are protected by the existing Supabase schedule marker.
-- The workflow queues concurrent invocations rather than replacing a pending run.
-- Runs outside the 20-minute slot grace are skipped and logged as `STALE SCHEDULE SKIPPED`.
+- The existing manual GitHub **Run workflow** action remains a short smoke test by default.
+- Only explicit `run_mode=production` dispatches run a production feed cycle.
+- The three production dispatches pass their matching UTC slot.
+- GitHub cron remains a backup.
+- Existing Supabase schedule markers prevent duplicate delivery when both triggers fire.
+- Runs outside the 20-minute slot grace are skipped and logged as `STALE SCHEDULE SKIPPED`; stale feeds will not be sent overnight.
 - The monitored-handle allocation, discovery allocation, feed selection, Groq budget, Telegram formatting, and `/project` workflow are unchanged.
