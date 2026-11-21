@@ -134,16 +134,28 @@ def _schedule_start(now: datetime) -> datetime:
     configured = os.getenv("SCHEDULE_SLOT", "").strip()
     legacy_slots = {"11": (11, 0), "16": (16, 0), "20": (20, 0)}
     configured_slot = None
-    if configured in legacy_slots:
-        configured_slot = legacy_slots[configured]
-    elif configured:
+    if configured:
+        # Production dispatches pass a date-bound UTC slot so a delayed job
+        # can never be mistaken for the next day's occurrence of that slot.
         try:
-            hour_text, minute_text = configured.split(":", 1)
-            candidate = (int(hour_text), int(minute_text))
-            if candidate in SCHEDULE_TIMES_UTC:
-                configured_slot = candidate
+            configured_at = datetime.fromisoformat(configured.replace("Z", "+00:00"))
+            if configured_at.tzinfo is None:
+                configured_at = configured_at.replace(tzinfo=timezone.utc)
+            configured_at = configured_at.astimezone(timezone.utc)
+            candidate = (configured_at.hour, configured_at.minute)
+            if candidate in SCHEDULE_TIMES_UTC and configured_at.second == 0 and configured_at.microsecond == 0:
+                return configured_at
         except (ValueError, TypeError):
-            logger.warning("Ignoring invalid SCHEDULE_SLOT=%r", configured)
+            if configured in legacy_slots:
+                configured_slot = legacy_slots[configured]
+            else:
+                try:
+                    hour_text, minute_text = configured.split(":", 1)
+                    candidate = (int(hour_text), int(minute_text))
+                    if candidate in SCHEDULE_TIMES_UTC:
+                        configured_slot = candidate
+                except (ValueError, TypeError):
+                    logger.warning("Ignoring invalid SCHEDULE_SLOT=%r", configured)
 
     if configured_slot is not None:
         hour, minute = configured_slot
@@ -540,11 +552,15 @@ def run_monitor_cycle() -> None:
         return
 
     if not test_mode and not in_grace:
-        logger.warning(
-            "LATE SCHEDULE RECOVERY | now=%s | latest_unprocessed_slot=%s | proceeding with that slot's fixed scan window",
+        # A late GitHub retry must never deliver yesterday's feed at 1–2 AM.
+        # The external scheduler is the primary trigger; retries are bounded to
+        # the same 20-minute window as the intended slot.
+        logger.error(
+            "STALE SCHEDULE SKIPPED | now=%s | slot=%s | outside 20-minute delivery window",
             now.isoformat(),
             _schedule_key(schedule_start),
         )
+        return
 
     previous_scan = _last_scan_checkpoint(db)
     window_start = schedule_start if test_mode else _previous_schedule_start(schedule_start)
