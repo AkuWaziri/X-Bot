@@ -157,12 +157,12 @@ def discover_posts(
             posts = search_provider.search_posts(topic.query, limit=20)
         except Exception as exc:
             # FxTwitter profile timelines work, but its search route can return
-            # 404. Fall back to the already-configured authenticated twscrape
-            # session for discovery only; keep monitored-account reads unchanged.
+            # 404 or 503. Fall back to the authenticated twscrape session for
+            # discovery only; keep monitored-account reads unchanged.
             if (
                 not fxtwitter_fallback_attempted
                 and "FxTwitter provider request failed" in str(exc)
-                and "404" in str(exc)
+                and ("404" in str(exc) or "503" in str(exc))
             ):
                 fxtwitter_fallback_attempted = True
                 try:
