@@ -166,7 +166,7 @@ def discover_posts(
             ):
                 fxtwitter_fallback_attempted = True
                 try:
-                    from bot.x.twscrape import TwscrapeProvider
+                    from bot.x.twscrape import TwscrapeBlockedError, TwscrapeProvider
 
                     search_provider = TwscrapeProvider()
                     logging.getLogger(__name__).warning(
@@ -174,6 +174,12 @@ def discover_posts(
                     )
                     posts = search_provider.search_posts(topic.query, limit=20)
                 except Exception as fallback_exc:
+                    if isinstance(fallback_exc, TwscrapeBlockedError):
+                        logging.getLogger(__name__).error(
+                            "DISCOVERY PROVIDER BLOCKED | provider=twscrape | stopping remaining topics | error=%s",
+                            str(fallback_exc)[:250],
+                        )
+                        break
                     logging.getLogger(__name__).warning(
                         "DISCOVERY SEARCH FAILED | topic=%s | provider=twscrape | error=%s",
                         topic.name,
