@@ -31,17 +31,22 @@ def test_project_accepts_hausa_special_letters():
     assert normalize_handle("ɓangare") == "ɓangare"
 
 
-def test_project_accepts_korean_chinese_japanese_arabic_and_cyrillic():
+def test_project_accepts_korean_and_chinese():
     queries = [
         "비트코인",
         "比特币",
         "區塊鏈",
-        "ブロックチェーン",
-        "بيتكوين",
-        "криптовалюта",
     ]
     for query in queries:
         assert normalize_handle(query) == query
+
+
+def test_project_rejects_scripts_outside_initial_scope():
+    import pytest
+
+    for query in ("ブロックチェーン", "بيتكوين", "криптовалюта"):
+        with pytest.raises(ValueError, match="English, Hausa, Korean, or Chinese"):
+            normalize_handle(query)
 
 
 def test_project_accepts_single_character_cjk_search():

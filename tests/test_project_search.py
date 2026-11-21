@@ -393,3 +393,23 @@ def test_fxtwitter_uses_created_timestamp_when_created_at_is_missing():
     assert mapped is not None
     assert mapped.created_at is not None
     assert datetime.fromisoformat(mapped.created_at).astimezone(timezone.utc) == datetime(2026, 10, 24, 19, 59, tzinfo=timezone.utc)
+
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "stablecoin payments",
+        "ƙwallon ƙafa ɗan wasa",
+        "안녕하세요 블록체인",
+        "区块链支付",
+    ],
+)
+def test_normalize_handle_accepts_initially_supported_languages(query):
+    assert normalize_handle(query) == query
+
+
+@pytest.mark.parametrize("query", ["مرحبا", "криптовалюта", "γειά σου"])
+def test_normalize_handle_rejects_languages_outside_initial_scope(query):
+    with pytest.raises(ValueError, match="English, Hausa, Korean, or Chinese"):
+        normalize_handle(query)

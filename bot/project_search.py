@@ -12,6 +12,23 @@ MAX_PROJECT_RESULTS = 35
 SEARCH_WINDOW_MINUTES = 180
 
 
+def _is_supported_project_query_char(char: str) -> bool:
+    """Allow Latin (English/Hausa), Hangul (Korean), and Han (Chinese) text."""
+    category = unicodedata.category(char)
+    name = unicodedata.name(char, "")
+    if category[0] in {"P", "Z", "N"} or char in "_-+&@#'’./:":
+        return True
+    if category[0] == "L":
+        return (
+            "LATIN" in name
+            or "HANGUL" in name
+            or "CJK UNIFIED IDEOGRAPH" in name
+            or "CJK COMPATIBILITY IDEOGRAPH" in name
+        )
+    # Combining marks are accepted only after NFC normalization where needed.
+    return category[0] == "M"
+
+
 def normalize_handle(value: str) -> str:
     """Normalize an X handle or preserve a free-text project/topic query."""
     query = unicodedata.normalize("NFC", " ".join(str(value or "").strip().split()))
@@ -26,15 +43,22 @@ def normalize_handle(value: str) -> str:
         raise ValueError("For an X handle, use letters, numbers, and underscores only.")
     if HANDLE_RE.fullmatch(query):
         return query
-    # Accept letters and numbers from every Unicode writing system, including
-    # Hausa characters (ƙ, ɗ, ɓ), Hangul, Han, Arabic, Cyrillic, and others.
-    # NFC keeps canonically equivalent spellings consistent without translating
-    # or transliterating the user's search term.
-    has_unicode_letter_or_number = any(
-        unicodedata.category(char)[0] in {"L", "N"} for char in query
+    # /project initially supports English and Hausa (Latin), Korean
+    # (Hangul), and Chinese (Han). Additional scripts can be enabled later.
+    has_supported_letter_or_number = any(
+        unicodedata.category(char)[0] in {"L", "N"}
+        and _is_supported_project_query_char(char)
+        for char in query
     )
-    if len(query) > 100 or len(query) < 1 or not has_unicode_letter_or_number:
-        raise ValueError("Search words must be 1–100 characters and include letters or numbers.")
+    if (
+        len(query) > 100
+        or len(query) < 1
+        or not has_supported_letter_or_number
+        or any(not _is_supported_project_query_char(char) for char in query)
+    ):
+        raise ValueError(
+            "Search words must be 1–100 characters and use English, Hausa, Korean, or Chinese."
+        )
     return query
 
 
