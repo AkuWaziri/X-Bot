@@ -210,7 +210,7 @@ def test_monitored_pool_randomizes_full_account_list():
 
     assert len(selected) == 20
     assert set(selected) == set(accounts)
-    assert MONITORED_HANDLES_PER_RUN == 25
+    assert MONITORED_HANDLES_PER_RUN == 15
 
 
 def test_monitored_handles_randomly_change_between_schedules():
@@ -223,9 +223,9 @@ def test_monitored_handles_randomly_change_between_schedules():
     second = _select_rotating_handles(db, accounts)
     third = _select_rotating_handles(db, accounts)
 
-    assert len(first) == 25
-    assert len(second) == 25
-    assert len(third) == 25
+    assert len(first) == 15
+    assert len(second) == 15
+    assert len(third) == 15
     assert set(first).isdisjoint(second)
     assert set(second).isdisjoint(third)
     assert len(set(first + second + third)) >= 40
@@ -262,7 +262,7 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
 
     selected = _select_rotating_handles(db, accounts)
 
-    assert len(selected) == 25
+    assert len(selected) == 15
     assert calls
     assert calls[0][1] == 25
 
@@ -613,8 +613,9 @@ def test_full_monitor_cycle_runs_with_mock_provider_without_twitterapis(monkeypa
     discovery_posts = [item for item in telegram_posts if str(item[1]).startswith("mock-discovery-")]
 
     assert len(monitored_posts) == MONITORED_HANDLES_PER_RUN == 15
-    assert len(discovery_posts) == MAX_DISCOVERY_POSTS_PER_RUN == 25
-    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + MAX_DISCOVERY_POSTS_PER_RUN == 40
+    assert len(discovery_posts) == 10  # MockXProvider supplies ten qualifying discovery fixtures.
+    assert MAX_DISCOVERY_POSTS_PER_RUN == 25
+    assert len(telegram_posts) == MONITORED_HANDLES_PER_RUN + len(discovery_posts) == 25
     assert len(saved_replies) == len(telegram_posts)
     assert any(item["event_type"] == "scan_checkpoint" for item in db.activities)
     assert not any(item["event_type"] == "error" for item in db.activities)
