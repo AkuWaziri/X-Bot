@@ -264,7 +264,7 @@ def test_monitored_handle_selection_uses_random_sample(monkeypatch):
 
     assert len(selected) == 15
     assert calls
-    assert calls[0][1] == 25
+    assert calls[0][1] == MONITORED_HANDLES_PER_RUN == 15
 
 
 def test_monitored_handle_sends_only_newest_qualifying_post(monkeypatch):
