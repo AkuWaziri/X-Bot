@@ -228,7 +228,9 @@ def test_monitored_handles_randomly_change_between_schedules():
     assert len(third) == 15
     assert set(first).isdisjoint(second)
     assert set(second).isdisjoint(third)
-    assert len(set(first + second + third)) >= 40
+    # Rotation excludes only the immediately previous batch; the first and third may overlap.
+    assert len(set(first + second + third)) >= 30
+    assert len(set(first + second + third)) <= 45
 
 
 def test_all_discovery_topics_run_at_every_schedule():
@@ -829,4 +831,37 @@ def test_discovery_falls_back_to_twscrape_on_fxtwitter_503(monkeypatch):
 
     assert result == []
     assert len(fallback_queries) == len(DISCOVERY_TOPICS)
+
+
+def test_discovery_stops_all_topics_after_twscrape_is_blocked(monkeypatch):
+    from bot.x.twscrape import TwscrapeBlockedError
+
+    topic_names = [topic.name for topic in DISCOVERY_TOPICS]
+    fallback_queries = []
+
+    class FxTwitterSearchProvider:
+        def search_posts(self, query, limit=20):
+            raise RuntimeError(
+                'FxTwitter provider request failed: HTTP 503: {"code":503,"message":"search unavailable"}'
+            )
+
+    class BlockedTwscrapeSearchProvider:
+        def search_posts(self, query, limit=20):
+            fallback_queries.append(query)
+            raise TwscrapeBlockedError("X blocked the twscrape session (403/Cloudflare)")
+
+    monkeypatch.setattr(
+        "bot.x.twscrape.TwscrapeProvider",
+        lambda: BlockedTwscrapeSearchProvider(),
+    )
+
+    result = discover_posts(
+        FxTwitterSearchProvider(),
+        monitored_handles=[],
+        max_posts=25,
+        topic_names=topic_names,
+    )
+
+    assert result == []
+    assert len(fallback_queries) == 1
 
