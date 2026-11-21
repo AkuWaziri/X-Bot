@@ -231,20 +231,20 @@ def test_monitored_handles_randomly_change_between_schedules():
     assert len(set(first + second + third)) >= 40
 
 
-def test_topic_selection_rotates_without_repeating_previous_batch():
+def test_all_discovery_topics_run_at_every_schedule():
     from bot.monitor import TOPICS_PER_RUN
 
     db = IntegrationDB()
+    expected = {topic.name for topic in DISCOVERY_TOPICS}
+
     first = _select_rotating_topics(db)
     second = _select_rotating_topics(db)
     third = _select_rotating_topics(db)
 
-    assert len(first) == TOPICS_PER_RUN == 5
-    assert len(second) == TOPICS_PER_RUN
-    assert len(third) == TOPICS_PER_RUN
-    assert set(first).isdisjoint(second)
-    assert set(second).isdisjoint(third)
-    assert len(set(first + second)) == 10
+    assert TOPICS_PER_RUN == len(DISCOVERY_TOPICS) == 10
+    assert set(first) == expected
+    assert set(second) == expected
+    assert set(third) == expected
 
 
 def test_monitored_handle_selection_uses_random_sample(monkeypatch):
@@ -451,20 +451,20 @@ def test_groq_rate_limit_blocks_feed_delivery(monkeypatch):
     assert telegram_calls[0]["reply_reason"]
     assert any(item[1] == "reply_generation_deferred" for item in activity)
 
-def test_discovery_topic_pool_covers_requested_categories():
+def test_discovery_topic_pool_contains_exact_requested_categories():
     names = {topic.name for topic in DISCOVERY_TOPICS}
-    assert {
-        "defi",
-        "comics",
+    assert names == {
+        "privacy",
         "ai_agents",
-        "airdrops",
-        "rewards",
-        "claim_now",
         "security",
-        "hot_topics",
-        "tokenized_stocks",
-        "payments_stablecoins",
-    } <= names
+        "comics_memes",
+        "creators",
+        "motivation",
+        "crypto_tools",
+        "encryption",
+        "automation",
+        "hot_crypto_topics",
+    }
 
 
 def test_last_scan_checkpoint_is_read_from_activity_log():

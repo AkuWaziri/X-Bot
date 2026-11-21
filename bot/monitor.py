@@ -27,7 +27,7 @@ SCAN_CHECKPOINT_EVENT = "scan_checkpoint"
 HANDLE_SCAN_CHECKPOINT_EVENT = "handle_scan_checkpoint"
 HANDLE_ROTATION_EVENT = "handle_rotation"
 TOPIC_ROTATION_EVENT = "topic_rotation"
-TOPICS_PER_RUN = 5
+TOPICS_PER_RUN = 10
 
 
 def telegram_already_sent(db, post_id: str) -> bool:

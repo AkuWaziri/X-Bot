@@ -15,16 +15,16 @@ class DiscoveryTopic:
 
 
 DISCOVERY_TOPICS = (
-    DiscoveryTopic("defi", '(DeFi OR "decentralized finance" OR DEX OR lending OR liquidity) (crypto OR web3)', ("defi", "dex", "lending", "liquidity", "finance")),
-    DiscoveryTopic("comics", '("crypto comic" OR "web3 comic" OR "crypto meme" OR "web3 meme")', ("comic", "meme", "crypto", "web3")),
-    DiscoveryTopic("ai_agents", '("AI agents" OR "AI agent" OR "agentic AI") (crypto OR web3 OR blockchain)', ("ai", "agent", "crypto", "web3", "builder")),
-    DiscoveryTopic("airdrops", '(airdrop OR testnet OR points) (crypto OR web3 OR blockchain)', ("airdrop", "testnet", "points", "crypto", "web3")),
-    DiscoveryTopic("rewards", '(rewards OR incentives OR points) (crypto OR web3 OR protocol)', ("rewards", "incentives", "points", "crypto", "protocol")),
-    DiscoveryTopic("claim_now", '("claim now" OR "claim your" OR claim) (airdrop OR rewards OR tokens) (crypto OR web3)', ("claim", "airdrop", "rewards", "tokens")),
-    DiscoveryTopic("security", '("crypto security" OR "defi hack" OR exploit OR drained OR hacked OR vulnerability) (crypto OR defi OR web3)', ("security", "hack", "exploit", "drained", "hacked")),
-    DiscoveryTopic("hot_topics", '(crypto OR bitcoin OR ethereum OR stablecoin OR solana OR web3) (trending OR "hot topic" OR viral OR breaking OR "just in")', ("crypto", "trending", "viral", "breaking", "news")),
-    DiscoveryTopic("tokenized_stocks", '(("tokenized stocks" OR "tokenized stock" OR "tokenized equities" OR "onchain stocks" OR "on-chain stocks" OR "stock tokens") AND (crypto OR blockchain OR web3 OR RWA OR "real world assets"))', ("stock", "stocks", "equities", "tokenized", "onchain", "rwa", "crypto", "blockchain")),
-    DiscoveryTopic("payments_stablecoins", '((payments OR stablecoin OR USDC OR USDT OR "stable coins") AND (crypto OR web3 OR blockchain))', ("payments", "stablecoin", "usdc", "usdt", "crypto", "web3", "blockchain")),
+    DiscoveryTopic("privacy", '(privacy OR "privacy-preserving" OR "zero knowledge" OR "zero-knowledge" OR ZK) (crypto OR web3 OR blockchain)', ("privacy", "zero knowledge", "zero-knowledge", "zk", "crypto", "web3")),
+    DiscoveryTopic("ai_agents", '("AI agents" OR "AI agent" OR "agentic AI") (crypto OR web3 OR blockchain)', ("ai", "agent", "agentic", "crypto", "web3")),
+    DiscoveryTopic("security", '("crypto security" OR "web3 security" OR exploit OR hacked OR vulnerability OR "smart contract security")', ("security", "exploit", "hacked", "vulnerability", "smart contract")),
+    DiscoveryTopic("comics_memes", '("crypto comic" OR "web3 comic" OR "crypto meme" OR "web3 meme" OR "blockchain meme")', ("comic", "comics", "meme", "memes", "crypto", "web3")),
+    DiscoveryTopic("creators", '("crypto creator" OR "web3 creator" OR "content creator" OR "creator economy") (crypto OR web3 OR blockchain)', ("creator", "creators", "content", "building", "web3")),
+    DiscoveryTopic("motivation", '(motivation OR mindset OR discipline OR consistency OR "keep building") (crypto OR web3 OR founder OR builder)', ("motivation", "mindset", "discipline", "consistency", "building")),
+    DiscoveryTopic("crypto_tools", '("crypto tools" OR "web3 tools" OR "onchain tools" OR "developer tools" OR "blockchain tools")', ("tools", "tool", "onchain", "developer", "crypto", "web3")),
+    DiscoveryTopic("encryption", '(encryption OR encrypted OR cryptography OR "end-to-end encryption") (crypto OR web3 OR blockchain)', ("encryption", "encrypted", "cryptography", "end-to-end", "crypto")),
+    DiscoveryTopic("automation", '(automation OR automated OR workflow OR "AI automation") (crypto OR web3 OR blockchain)', ("automation", "automated", "workflow", "ai", "crypto", "web3")),
+    DiscoveryTopic("hot_crypto_topics", '(crypto OR bitcoin OR ethereum OR stablecoin OR solana OR web3) (trending OR "hot topic" OR viral OR breaking OR "just in")', ("crypto", "bitcoin", "ethereum", "stablecoin", "solana", "trending", "viral", "breaking")),
 )
 
 SPAMMY_TERMS = ("referral", "ref link", "dm me for", "free followers", "casino")
@@ -136,7 +136,7 @@ def discover_posts(
     max_posts: int = 10,
     topic_names: list[str] | None = None,
 ) -> list[tuple[Post, str, int]]:
-    """Find recent qualifying posts from the requested rotating topic subset."""
+    """Find recent qualifying posts across the requested topic batch."""
     if topic_names is None:
         topics = list(DISCOVERY_TOPICS)
         random.shuffle(topics)
