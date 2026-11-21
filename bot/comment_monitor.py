@@ -53,19 +53,28 @@ def _owned_post_ids(db) -> set[str]:
 
 
 def _remember_owned_posts(db, posts) -> set[str]:
+    # Provider timelines can contain the same post more than once (for
+    # example, overlapping pages or duplicate search results). PostgREST
+    # rejects a single upsert batch when its conflict key appears twice.
+    # Keep the first occurrence so the newest timeline representation wins.
     rows = []
+    seen_post_ids: set[str] = set()
     for post in posts:
         if post.username.lstrip("@").lower() != OWNER_HANDLE:
             continue
+        post_id = str(post.id or "").strip()
+        if not post_id or post_id in seen_post_ids:
+            continue
+        seen_post_ids.add(post_id)
         rows.append({
-            "post_id": str(post.id),
-            "post_url": post.url or f"https://x.com/{OWNER_HANDLE}/status/{post.id}",
+            "post_id": post_id,
+            "post_url": post.url or f"https://x.com/{OWNER_HANDLE}/status/{post_id}",
             "post_text": post.text,
             "posted_at": post.created_at,
         })
     if rows:
         db.table("owned_posts").upsert(rows, on_conflict="post_id").execute()
-    return {row["post_id"] for row in rows}
+    return seen_post_ids
 
 
 def _notify_comment(db, bot, loop, comment, root_post_id: str) -> bool:
