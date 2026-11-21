@@ -49,8 +49,8 @@ def test_project_accepts_single_character_cjk_search():
 
 
 def test_project_normalizes_canonically_equivalent_unicode():
-    decomposed_hausa = "ƙ"  # NFC form remains stable.
-    assert normalize_handle(decomposed_hausa) == decomposed_hausa
+    decomposed = "cafe\\u0301"
+    assert normalize_handle(decomposed) == "café"
 
 
 def test_unicode_query_is_passed_to_x_provider_without_translation():
