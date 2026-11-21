@@ -2,17 +2,30 @@ name: X-Bot Scheduled Feed
 
 on:
   workflow_dispatch:
+    inputs:
+      run_mode:
+        description: "Use test for a short smoke test or production for a scheduled feed slot"
+        required: true
+        type: choice
+        options:
+          - test
+          - production
+        default: test
+      schedule_slot:
+        description: "UTC slot timestamp, e.g. 2026-11-21T11:00Z (required for production)"
+        required: false
+        type: string
+  # Backup only. Primary punctual triggers should come from an external scheduler.
   # WAT feed slots: 12:00, 17:00 and 21:00 (UTC: 11:00, 16:00 and 20:00).
-  # Two short retries help recover from GitHub Actions schedule delays.
-  # The monitor records completed slots and ignores duplicate retries.
+  # Minutes are offset from the hour to reduce GitHub's top-of-hour congestion.
   schedule:
-    - cron: "0 11,16,20 * * *"
     - cron: "7 11,16,20 * * *"
     - cron: "15 11,16,20 * * *"
 
 concurrency:
   group: x-bot-scheduler
   cancel-in-progress: false
+  queue: max
 
 jobs:
   monitor:
@@ -47,9 +60,10 @@ jobs:
           GROQ_VALIDATION_ATTEMPTS: "1"
           X_PROVIDER_MODE: fxtwitter
           AUTO_REPLY: "false"
-          SCHEDULE_SLOT: ""
-          # Manual dispatch is a short delivery smoke test; scheduled runs retain their normal window.
-          TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
+          # Production workflow_dispatch must pass an exact UTC slot timestamp.
+          SCHEDULE_SLOT: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode == 'production' && inputs.schedule_slot || '' }}
+          # Manual dispatch defaults to a smoke test; external production dispatch opts in explicitly.
+          TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mode != 'production' && 'true' || 'false' }}
           TEST_WINDOW_MINUTES: "10"
         run: python -m bot.monitor
 
