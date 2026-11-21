@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 
-from bot.discovery import DISCOVERY_TOPICS
+from bot.discovery import DISCOVERY_TOPICS, discover_posts
 from bot.monitor import (
     MONITORED_HANDLES_PER_RUN,
     MAX_DISCOVERY_POSTS_PER_RUN,
@@ -774,3 +774,32 @@ def test_stale_scheduled_run_is_skipped_without_scanning(monkeypatch):
 
     assert called == []
     assert not any(item.get("event_type") == "schedule_processed" for item in db.activities)
+
+def test_discovery_falls_back_to_twscrape_on_fxtwitter_503(monkeypatch):
+    topic_names = [topic.name for topic in DISCOVERY_TOPICS]
+    fallback_queries = []
+
+    class FxTwitterSearchProvider:
+        def search_posts(self, query, limit=20):
+            raise RuntimeError(
+                'FxTwitter provider request failed: HTTP 503: {"code":503,"message":"search unavailable"}'
+            )
+
+    class TwscrapeSearchProvider:
+        def search_posts(self, query, limit=20):
+            fallback_queries.append(query)
+            return []
+
+    fallback = TwscrapeSearchProvider()
+    monkeypatch.setattr("bot.x.twscrape.TwscrapeProvider", lambda: fallback)
+
+    result = discover_posts(
+        FxTwitterSearchProvider(),
+        monitored_handles=[],
+        max_posts=25,
+        topic_names=topic_names,
+    )
+
+    assert result == []
+    assert len(fallback_queries) == len(DISCOVERY_TOPICS)
+
