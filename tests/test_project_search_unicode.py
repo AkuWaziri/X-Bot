@@ -49,7 +49,7 @@ def test_project_accepts_single_character_cjk_search():
 
 
 def test_project_normalizes_canonically_equivalent_unicode():
-    decomposed = "cafe\\u0301"
+    decomposed = "cafe\u0301"
     assert normalize_handle(decomposed) == "café"
 
 
