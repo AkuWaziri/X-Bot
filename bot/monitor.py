@@ -552,7 +552,7 @@ def run_monitor_cycle() -> None:
         logger.info("SCHEDULE ALREADY PROCESSED | slot=%s", _schedule_key(schedule_start))
         return
 
-    if not test_mode and not in_grace:
+    if not test_mode and not force_manual_run and not in_grace:
         # A late GitHub retry must never deliver yesterday's feed at 1–2 AM.
         # The external scheduler is the primary trigger; retries are bounded to
         # the same 20-minute window as the intended slot.
