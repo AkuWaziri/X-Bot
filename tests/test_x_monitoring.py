@@ -874,6 +874,14 @@ def test_discovery_stops_all_topics_after_twscrape_is_blocked(monkeypatch):
         "bot.x.twscrape.TwscrapeProvider",
         lambda: BlockedTwscrapeSearchProvider(),
     )
+    class UnavailableFreeWebSearch:
+        def search_posts(self, query, limit=20):
+            raise RuntimeError("DuckDuckGo search unavailable")
+
+    monkeypatch.setattr(
+        "bot.x.websearch.FreeWebSearchProvider",
+        lambda: UnavailableFreeWebSearch(),
+    )
 
     from bot.discovery import DiscoveryProviderUnavailable
 
