@@ -32,16 +32,13 @@ class FxTwitterProvider(XProvider):
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            # FxTwitter documents HTTP/API 404 for a valid search with no matches.
-            # Treat that as an empty result set instead of invoking the authenticated
-            # twscrape fallback, which can fail independently with X 403s.
+            # The public FxTwitter search backend commonly returns 404 when
+            # its guest session is refused. This means SEARCH UNAVAILABLE, not
+            # "zero matches"; raise so discovery can try an independent provider.
             if path == "/2/search" and exc.code == 404:
-                logging.info(
-                    "FXTWITTER SEARCH EMPTY | status=404 | query=%s | response=%s",
-                    (params or {}).get("q", ""),
-                    body[:240].replace("\\n", " "),
-                )
-                return {"code": 200, "results": [], "cursor": {}}
+                raise RuntimeError(
+                    f"FxTwitter provider request failed: search unavailable (HTTP 404): {body[:500]}"
+                ) from exc
             if path.startswith("/2/profile/") and path.endswith("/statuses") and exc.code == 404:
                 # FxTwitter documents 404 for both missing accounts and empty /
                 # unavailable timelines. Neither should fail the whole feed cycle.
