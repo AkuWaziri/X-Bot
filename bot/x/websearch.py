@@ -35,7 +35,7 @@ class _ResultLinks(HTMLParser):
 
     def handle_endtag(self, tag):
         if tag == "a" and self._href is not None:
-            self.links.append((self._href, " ".join(self._text)))
+            self.links.append((self._href, " ".join(" ".join(self._text).split())))
             self._href = None
             self._text = []
 
