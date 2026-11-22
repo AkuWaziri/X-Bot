@@ -103,7 +103,7 @@ class FreeWebSearchProvider(XProvider):
 
     @classmethod
     def _search_ids(cls, query: str, limit: int) -> list[tuple[str, str]]:
-        search_query = f"site:x.com/*/status/ {query}"
+        search_query = f"site:x.com {query}"
         body = urllib.parse.urlencode({"q": search_query, "kl": "us-en"}).encode()
         page = cls._request(cls.SEARCH_URL, data=body)
         parser = _ResultLinks()
