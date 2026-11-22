@@ -890,3 +890,53 @@ def test_discovery_stops_all_topics_after_twscrape_is_blocked(monkeypatch):
         raise AssertionError("all failed topic providers must raise an explicit outage")
     assert len(fallback_queries) == 1
 
+
+
+def test_discovery_uses_free_web_search_after_twscrape_is_blocked(monkeypatch):
+    from bot.discovery import DiscoveryProviderUnavailable
+    from bot.x.base import Post
+    from bot.x.twscrape import TwscrapeBlockedError
+
+    calls = []
+
+    class FxTwitterSearchProvider:
+        def search_posts(self, query, limit=20):
+            raise RuntimeError("FxTwitter provider request failed: search unavailable (HTTP 404)")
+
+    class BlockedTwscrapeSearchProvider:
+        def search_posts(self, query, limit=20):
+            raise TwscrapeBlockedError("X blocked the twscrape search session (403/Cloudflare)")
+
+    class FreeWebSearch:
+        def search_posts(self, query, limit=20):
+            calls.append(query)
+            return [
+                Post(
+                    id=f"web-{len(calls)}",
+                    text="privacy preserving crypto infrastructure update",
+                    username=f"author{len(calls)}",
+                    created_at="2026-11-22T10:00:00+00:00",
+                    url=f"https://x.com/author{len(calls)}/status/web-{len(calls)}",
+                    raw={"author": {"is_blue_verified": True}},
+                )
+            ]
+
+    monkeypatch.setattr(
+        "bot.x.twscrape.TwscrapeProvider",
+        lambda: BlockedTwscrapeSearchProvider(),
+    )
+    monkeypatch.setattr(
+        "bot.x.websearch.FreeWebSearchProvider",
+        lambda: FreeWebSearch(),
+    )
+
+    result = discover_posts(
+        FxTwitterSearchProvider(),
+        monitored_handles=[],
+        max_posts=25,
+        topic_names=[topic.name for topic in DISCOVERY_TOPICS],
+    )
+
+    assert len(calls) == len(DISCOVERY_TOPICS)
+    assert len(result) == len(DISCOVERY_TOPICS)
+    assert all(item[0].username.startswith("author") for item in result)
