@@ -52,6 +52,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TWITTERAPIS_X_AUTH_TOKEN: ${{ secrets.TWITTERAPIS_X_AUTH_TOKEN }}
           TWITTERAPIS_CT0: ${{ secrets.TWITTERAPIS_CT0 }}
+          # Optional independent search fallback; empty when the secret is not configured.
+          TWITTERAPIS_API_KEY: ${{ secrets.TWITTERAPIS_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
