@@ -904,7 +904,7 @@ def test_twscrape_search_converts_http_403_to_blocked_error(monkeypatch):
         raise AssertionError("HTTP 403 must be classified as a blocked session")
 
 
-def test_discovery_stops_all_topics_after_twscrape_is_blocked(monkeypatch):
+def test_discovery_continues_all_topics_after_twscrape_is_blocked(monkeypatch):
     from bot.x.twscrape import TwscrapeBlockedError
 
     topic_names = [topic.name for topic in DISCOVERY_TOPICS]
@@ -925,8 +925,11 @@ def test_discovery_stops_all_topics_after_twscrape_is_blocked(monkeypatch):
         "bot.x.twscrape.TwscrapeProvider",
         lambda: BlockedTwscrapeSearchProvider(),
     )
+    web_queries = []
+
     class UnavailableFreeWebSearch:
         def search_posts(self, query, limit=20):
+            web_queries.append(query)
             raise RuntimeError("DuckDuckGo search unavailable")
 
     monkeypatch.setattr(
@@ -947,7 +950,8 @@ def test_discovery_stops_all_topics_after_twscrape_is_blocked(monkeypatch):
         pass
     else:
         raise AssertionError("all failed topic providers must raise an explicit outage")
-    assert len(fallback_queries) == 1
+    assert len(fallback_queries) == len(DISCOVERY_TOPICS)
+    assert len(web_queries) == len(DISCOVERY_TOPICS)
 
 
 
