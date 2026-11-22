@@ -157,3 +157,24 @@ def test_fxtwitter_keeps_original_post_with_matching_conversation_id():
     post = FxTwitterProvider._to_post(item)
     assert post is not None
     assert post.id == "root-1"
+
+
+def test_free_web_search_extracts_x_status_links(monkeypatch):
+    from bot.x.websearch import FreeWebSearchProvider
+
+    page = """
+    <div class="result">
+      <a class="result__a" href="https://x.com/alice/status/1234567890123456789">
+        Privacy update from Alice
+      </a>
+    </div>
+    """
+    monkeypatch.setattr(
+        FreeWebSearchProvider,
+        "_request",
+        staticmethod(lambda url, data=None: page),
+    )
+
+    hits = FreeWebSearchProvider._search_ids("privacy", 10)
+
+    assert hits == [("1234567890123456789", ("alice", "Privacy update from Alice"))]
