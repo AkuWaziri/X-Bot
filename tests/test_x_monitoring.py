@@ -822,6 +822,15 @@ def test_discovery_falls_back_to_twscrape_on_fxtwitter_503(monkeypatch):
     fallback = TwscrapeSearchProvider()
     monkeypatch.setattr("bot.x.twscrape.TwscrapeProvider", lambda: fallback)
 
+    class EmptyFreeWebSearch:
+        def search_posts(self, query, limit=20):
+            return []
+
+    monkeypatch.setattr(
+        "bot.x.websearch.FreeWebSearchProvider",
+        lambda: EmptyFreeWebSearch(),
+    )
+
     result = discover_posts(
         FxTwitterSearchProvider(),
         monitored_handles=[],
@@ -831,6 +840,48 @@ def test_discovery_falls_back_to_twscrape_on_fxtwitter_503(monkeypatch):
 
     assert result == []
     assert len(fallback_queries) == len(DISCOVERY_TOPICS)
+
+
+
+
+def test_discovery_falls_back_when_fxtwitter_returns_empty(monkeypatch):
+    topic_names = [topic.name for topic in DISCOVERY_TOPICS]
+    twscrape_queries = []
+    web_queries = []
+
+    class EmptyFxTwitterSearchProvider:
+        def search_posts(self, query, limit=20):
+            return []
+
+    class EmptyTwscrapeSearchProvider:
+        def search_posts(self, query, limit=20):
+            twscrape_queries.append(query)
+            return []
+
+    class EmptyFreeWebSearch:
+        def search_posts(self, query, limit=20):
+            web_queries.append(query)
+            return []
+
+    monkeypatch.setattr(
+        "bot.x.twscrape.TwscrapeProvider",
+        lambda: EmptyTwscrapeSearchProvider(),
+    )
+    monkeypatch.setattr(
+        "bot.x.websearch.FreeWebSearchProvider",
+        lambda: EmptyFreeWebSearch(),
+    )
+
+    result = discover_posts(
+        EmptyFxTwitterSearchProvider(),
+        monitored_handles=[],
+        max_posts=25,
+        topic_names=topic_names,
+    )
+
+    assert result == []
+    assert len(twscrape_queries) == len(DISCOVERY_TOPICS)
+    assert len(web_queries) == len(DISCOVERY_TOPICS)
 
 
 def test_twscrape_search_converts_http_403_to_blocked_error(monkeypatch):
