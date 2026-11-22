@@ -918,12 +918,14 @@ def test_discovery_uses_free_web_search_after_twscrape_is_blocked(monkeypatch):
     class FreeWebSearch:
         def search_posts(self, query, limit=20):
             calls.append(query)
+            topic = next(topic for topic in DISCOVERY_TOPICS if topic.query == query)
+            text = " ".join(topic.keywords[:3]) + " infrastructure update"
             return [
                 Post(
                     id=f"web-{len(calls)}",
-                    text="privacy preserving crypto infrastructure update",
+                    text=text,
                     username=f"author{len(calls)}",
-                    created_at="2026-11-22T10:00:00+00:00",
+                    created_at=f"2026-11-22T10:{len(calls):02d}:00+00:00",
                     url=f"https://x.com/author{len(calls)}/status/web-{len(calls)}",
                     raw={"author": {"is_blue_verified": True}},
                 )
