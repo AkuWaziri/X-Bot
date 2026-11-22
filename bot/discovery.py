@@ -203,7 +203,8 @@ def discover_posts(
                         if isinstance(fallback_exc, TwscrapeBlockedError):
                             break
                 if posts is None:
-                    continue
+                    # No fallback provider could complete even one search.
+                    break
             else:
                 logging.getLogger(__name__).warning(
                     "DISCOVERY SEARCH FAILED | topic=%s | provider=%s | error=%s",
