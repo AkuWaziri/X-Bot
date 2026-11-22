@@ -123,7 +123,7 @@ def test_search_posts_skips_failed_hydration_and_returns_valid_posts(monkeypatch
     )
     calls = []
 
-    def hydrate(tweet_id):
+    def hydrate(self, tweet_id):
         calls.append(tweet_id)
         if tweet_id.startswith("1"):
             raise RuntimeError("temporary syndication error")
