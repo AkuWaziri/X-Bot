@@ -483,12 +483,19 @@ def _run_discovery(
         return 0, False
 
     rotating_topics = _select_rotating_topics(db)
-    candidates = discover_posts(
-        provider,
-        accounts,
-        max_posts=max(DISCOVERY_CANDIDATE_POOL_SIZE, max_posts),
-        topic_names=rotating_topics,
-    )
+    try:
+        candidates = discover_posts(
+            provider,
+            accounts,
+            max_posts=max(DISCOVERY_CANDIDATE_POOL_SIZE, max_posts),
+            topic_names=rotating_topics,
+        )
+    except Exception as exc:
+        from bot.discovery import DiscoveryProviderUnavailable
+        if isinstance(exc, DiscoveryProviderUnavailable):
+            logger.error("DISCOVERY PROVIDER UNAVAILABLE | %s", str(exc))
+            return 0, True
+        raise
     if not candidates:
         logger.info("Discovery found no qualifying non-monitored posts.")
         return 0, False
@@ -619,7 +626,7 @@ def run_monitor_cycle() -> None:
 
     if had_error:
         logger.error("SCAN NOT CHECKPOINTED | one or more feed operations failed")
-        return
+        return False
 
     _mark_scan_checkpoint(db, now)
     _mark_schedule_processed(db, schedule_start)
@@ -628,4 +635,5 @@ def run_monitor_cycle() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
-    run_monitor_cycle()
+    if run_monitor_cycle() is False:
+        raise SystemExit(1)
