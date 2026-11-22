@@ -117,7 +117,7 @@ class FreeWebSearchProvider(XProvider):
                 if target:
                     href = urllib.parse.unquote(target[0])
             match = re.search(
-                r"(?:https?://)?(?:www\\.)?(?:x\\.com|twitter\\.com)/([A-Za-z0-9_]{1,15})/status/(\\d{5,25})",
+                r"(?:https?://)?(?:www\.)?(?:x\.com|twitter\.com)/([A-Za-z0-9_]{1,15})/status/(\d{5,25})",
                 href,
                 re.IGNORECASE,
             )
