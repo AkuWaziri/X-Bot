@@ -27,6 +27,10 @@ DISCOVERY_TOPICS = (
     DiscoveryTopic("hot_crypto_topics", '(crypto OR bitcoin OR ethereum OR stablecoin OR solana OR web3) (trending OR "hot topic" OR viral OR breaking OR "just in")', ("crypto", "bitcoin", "ethereum", "stablecoin", "solana", "trending", "viral", "breaking")),
 )
 
+class DiscoveryProviderUnavailable(RuntimeError):
+    """Raised when every topic search failed at the provider layer."""
+
+
 SPAMMY_TERMS = ("referral", "ref link", "dm me for", "free followers", "casino")
 
 
@@ -150,48 +154,61 @@ def discover_posts(
     monitored = {handle.lstrip("@").lower() for handle in monitored_handles}
     candidates: list[tuple[Post, str, int]] = []
     search_provider = provider
-    fxtwitter_fallback_attempted = False
+    fallback_attempted = False
+    successful_searches = 0
+    failed_searches = 0
 
     for topic in topics:
         try:
             posts = search_provider.search_posts(topic.query, limit=20)
+            successful_searches += 1
         except Exception as exc:
-            # FxTwitter profile timelines work, but its search route can return
-            # 404 or 503. Fall back to the authenticated twscrape session for
-            # discovery only; keep monitored-account reads unchanged.
-            if (
-                not fxtwitter_fallback_attempted
-                and "FxTwitter provider request failed" in str(exc)
-                and ("404" in str(exc) or "503" in str(exc))
-            ):
-                fxtwitter_fallback_attempted = True
-                try:
-                    from bot.x.twscrape import TwscrapeBlockedError, TwscrapeProvider
+            failed_searches += 1
+            # FxTwitter's public search endpoint often returns 404 because its
+            # guest search session is blocked. It is not an empty search result.
+            # Try the configured paid provider only when its key is present,
+            # then retain twscrape as the final no-cost fallback.
+            if not fallback_attempted and search_provider is provider and "FxTwitter" in str(exc):
+                fallback_attempted = True
+                fallback_providers = []
+                from bot.config import TWITTERAPIS_API_KEY
+                if TWITTERAPIS_API_KEY:
+                    from bot.x.twitterapis import TwitterAPIsProvider
+                    fallback_providers.append(("twitterapis", lambda: TwitterAPIsProvider(TWITTERAPIS_API_KEY)))
+                fallback_providers.append(("twscrape", None))
 
-                    search_provider = TwscrapeProvider()
-                    logging.getLogger(__name__).warning(
-                        "DISCOVERY PROVIDER FALLBACK | from=fxtwitter | to=twscrape"
-                    )
-                    posts = search_provider.search_posts(topic.query, limit=20)
-                except Exception as fallback_exc:
-                    if isinstance(fallback_exc, TwscrapeBlockedError):
+                posts = None
+                for provider_name, provider_factory in fallback_providers:
+                    try:
+                        if provider_factory is not None:
+                            search_provider = provider_factory()
+                        else:
+                            from bot.x.twscrape import TwscrapeProvider
+                            search_provider = TwscrapeProvider()
+                        logging.getLogger(__name__).warning(
+                            "DISCOVERY PROVIDER FALLBACK | from=fxtwitter | to=%s",
+                            provider_name,
+                        )
+                        posts = search_provider.search_posts(topic.query, limit=20)
+                        successful_searches += 1
+                        break
+                    except Exception as fallback_exc:
+                        failed_searches += 1
+                        from bot.x.twscrape import TwscrapeBlockedError
                         logging.getLogger(__name__).error(
-                            "DISCOVERY PROVIDER BLOCKED | provider=twscrape | stopping remaining topics | error=%s",
+                            "DISCOVERY PROVIDER FAILED | provider=%s | error=%s",
+                            provider_name,
                             str(fallback_exc)[:250],
                         )
-                        break
-                    logging.getLogger(__name__).warning(
-                        "DISCOVERY SEARCH FAILED | topic=%s | provider=twscrape | error=%s",
-                        topic.name,
-                        str(fallback_exc)[:250],
-                    )
+                        if isinstance(fallback_exc, TwscrapeBlockedError):
+                            break
+                if posts is None:
                     continue
             else:
-                # Do not hide provider failures: otherwise the run looks healthy
-                # while all five discovery slots silently disappear.
                 logging.getLogger(__name__).warning(
-                    "DISCOVERY SEARCH FAILED | topic=%s | error=%s",
+                    "DISCOVERY SEARCH FAILED | topic=%s | provider=%s | error=%s",
                     topic.name,
+                    type(search_provider).__name__,
                     str(exc)[:250],
                 )
                 continue
@@ -222,6 +239,11 @@ def discover_posts(
             topic.name,
             len(posts),
             accepted_for_topic,
+        )
+
+    if successful_searches == 0 and failed_searches:
+        raise DiscoveryProviderUnavailable(
+            f"All topic searches failed: {failed_searches} provider attempts failed; no search completed"
         )
 
     candidates.sort(key=lambda item: (_created_at(item[0]), item[2]), reverse=True)
