@@ -76,7 +76,7 @@ def test_fxtwitter_empty_profile_timeline_404_returns_no_posts(monkeypatch):
     assert posts == []
 
 
-def test_fxtwitter_empty_search_404_returns_no_posts(monkeypatch):
+def test_fxtwitter_search_404_is_reported_as_unavailable(monkeypatch):
     import io
     import urllib.error
 
@@ -88,14 +88,18 @@ def test_fxtwitter_empty_search_404_returns_no_posts(monkeypatch):
             404,
             "Not Found",
             {},
-            io.BytesIO(b'{"code":404,"message":"No search results"}'),
+            io.BytesIO(b'{"code":404,"message":"Search unavailable"}'),
         )
 
     monkeypatch.setattr("bot.x.fxtwitter.urllib.request.urlopen", raise_not_found)
 
-    posts = FxTwitterProvider().search_posts("defi crypto", limit=20)
-
-    assert posts == []
+    try:
+        FxTwitterProvider().search_posts("defi crypto", limit=20)
+    except RuntimeError as exc:
+        assert "search unavailable" in str(exc).lower()
+        assert "404" in str(exc)
+    else:
+        raise AssertionError("FxTwitter search 404 must trigger provider fallback")
 
 
 
