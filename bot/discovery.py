@@ -164,27 +164,20 @@ def discover_posts(
             successful_searches += 1
         except Exception as exc:
             failed_searches += 1
-            # FxTwitter's public search endpoint often returns 404 because its
-            # guest search session is blocked. It is not an empty search result.
-            # Try the configured paid provider only when its key is present,
-            # then retain twscrape as the final no-cost fallback.
+            # FxTwitter search is currently unavailable (HTTP 404/5xx). It is
+            # not an empty result. Try the existing free authenticated session,
+            # then a no-key web-index search that hydrates public X posts.
             if not fallback_attempted and search_provider is provider and "FxTwitter" in str(exc):
                 fallback_attempted = True
-                fallback_providers = []
-                from bot.config import TWITTERAPIS_API_KEY
-                if TWITTERAPIS_API_KEY:
-                    from bot.x.twitterapis import TwitterAPIsProvider
-                    fallback_providers.append(("twitterapis", lambda: TwitterAPIsProvider(TWITTERAPIS_API_KEY)))
-                fallback_providers.append(("twscrape", None))
+                fallback_providers = [
+                    ("twscrape", lambda: __import__("bot.x.twscrape", fromlist=["TwscrapeProvider"]).TwscrapeProvider()),
+                    ("free_web_search", lambda: __import__("bot.x.websearch", fromlist=["FreeWebSearchProvider"]).FreeWebSearchProvider()),
+                ]
 
                 posts = None
                 for provider_name, provider_factory in fallback_providers:
                     try:
-                        if provider_factory is not None:
-                            search_provider = provider_factory()
-                        else:
-                            from bot.x.twscrape import TwscrapeProvider
-                            search_provider = TwscrapeProvider()
+                        search_provider = provider_factory()
                         logging.getLogger(__name__).warning(
                             "DISCOVERY PROVIDER FALLBACK | from=fxtwitter | to=%s",
                             provider_name,
@@ -194,16 +187,13 @@ def discover_posts(
                         break
                     except Exception as fallback_exc:
                         failed_searches += 1
-                        from bot.x.twscrape import TwscrapeBlockedError
                         logging.getLogger(__name__).error(
                             "DISCOVERY PROVIDER FAILED | provider=%s | error=%s",
                             provider_name,
                             str(fallback_exc)[:250],
                         )
-                        if isinstance(fallback_exc, TwscrapeBlockedError):
-                            break
                 if posts is None:
-                    # No fallback provider could complete even one search.
+                    # No free provider could complete even one search.
                     break
             else:
                 logging.getLogger(__name__).warning(
