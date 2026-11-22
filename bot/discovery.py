@@ -158,51 +158,79 @@ def discover_posts(
     successful_searches = 0
     failed_searches = 0
 
+    fallback_providers = [
+        ("twscrape", lambda: __import__("bot.x.twscrape", fromlist=["TwscrapeProvider"]).TwscrapeProvider()),
+        ("free_web_search", lambda: __import__("bot.x.websearch", fromlist=["FreeWebSearchProvider"]).FreeWebSearchProvider()),
+    ]
+    fallback_instances = {}
+
     for topic in topics:
+        posts = []
+        primary_error = None
         try:
-            posts = search_provider.search_posts(topic.query, limit=20)
+            posts = search_provider.search_posts(topic.query, limit=20) or []
             successful_searches += 1
         except Exception as exc:
+            primary_error = exc
             failed_searches += 1
-            # FxTwitter search is currently unavailable (HTTP 404/5xx). It is
-            # not an empty result. Try the existing free authenticated session,
-            # then a no-key web-index search that hydrates public X posts.
-            if not fallback_attempted and search_provider is provider and "FxTwitter" in str(exc):
-                fallback_attempted = True
-                fallback_providers = [
-                    ("twscrape", lambda: __import__("bot.x.twscrape", fromlist=["TwscrapeProvider"]).TwscrapeProvider()),
-                    ("free_web_search", lambda: __import__("bot.x.websearch", fromlist=["FreeWebSearchProvider"]).FreeWebSearchProvider()),
-                ]
+            logging.getLogger(__name__).warning(
+                "DISCOVERY SEARCH FAILED | topic=%s | provider=%s | error=%s",
+                topic.name,
+                type(search_provider).__name__,
+                str(exc)[:250],
+            )
 
-                posts = None
-                for provider_name, provider_factory in fallback_providers:
-                    try:
-                        search_provider = provider_factory()
-                        logging.getLogger(__name__).warning(
-                            "DISCOVERY PROVIDER FALLBACK | from=fxtwitter | to=%s",
-                            provider_name,
-                        )
-                        posts = search_provider.search_posts(topic.query, limit=20)
-                        successful_searches += 1
+        # Empty search results are not proof that a provider is healthy: X
+        # search endpoints can return empty responses during outages. Try the
+        # remaining free providers so one empty/blocked provider cannot zero
+        # out the entire topic-discovery batch.
+        should_fallback = (
+            not posts
+            and not fallback_attempted
+            and search_provider is provider
+            and "FxTwitter" in type(provider).__name__
+        )
+        if should_fallback:
+            fallback_attempted = True
+            for provider_name, provider_factory in fallback_providers:
+                try:
+                    candidate_provider = fallback_instances.get(provider_name)
+                    if candidate_provider is None:
+                        candidate_provider = provider_factory()
+                        fallback_instances[provider_name] = candidate_provider
+                    logging.getLogger(__name__).warning(
+                        "DISCOVERY PROVIDER FALLBACK | from=fxtwitter | to=%s | topic=%s",
+                        provider_name,
+                        topic.name,
+                    )
+                    fallback_posts = candidate_provider.search_posts(topic.query, limit=20) or []
+                    successful_searches += 1
+                    if fallback_posts:
+                        search_provider = candidate_provider
+                        posts = fallback_posts
                         break
-                    except Exception as fallback_exc:
-                        failed_searches += 1
-                        logging.getLogger(__name__).error(
-                            "DISCOVERY PROVIDER FAILED | provider=%s | error=%s",
-                            provider_name,
-                            str(fallback_exc)[:250],
-                        )
-                if posts is None:
-                    # No free provider could complete even one search.
-                    break
-            else:
-                logging.getLogger(__name__).warning(
-                    "DISCOVERY SEARCH FAILED | topic=%s | provider=%s | error=%s",
-                    topic.name,
-                    type(search_provider).__name__,
-                    str(exc)[:250],
-                )
+                    logging.getLogger(__name__).warning(
+                        "DISCOVERY PROVIDER EMPTY | provider=%s | topic=%s",
+                        provider_name,
+                        topic.name,
+                    )
+                except Exception as fallback_exc:
+                    failed_searches += 1
+                    logging.getLogger(__name__).error(
+                        "DISCOVERY PROVIDER FAILED | provider=%s | topic=%s | error=%s",
+                        provider_name,
+                        topic.name,
+                        str(fallback_exc)[:250],
+                    )
+
+        if not posts:
+            if primary_error is not None:
                 continue
+            logging.getLogger(__name__).info(
+                "DISCOVERY SEARCH EMPTY | topic=%s | provider=%s",
+                topic.name,
+                type(search_provider).__name__,
+            )
 
         accepted_for_topic = 0
         for post in posts:
