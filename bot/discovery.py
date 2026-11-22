@@ -186,12 +186,12 @@ def discover_posts(
         # out the entire topic-discovery batch.
         should_fallback = (
             not posts
-            and not fallback_attempted
-            and search_provider is provider
-            and "FxTwitter" in type(provider).__name__
+            and (
+                "FxTwitter" in type(provider).__name__
+                or type(search_provider).__name__ in {"TwscrapeProvider", "FreeWebSearchProvider"}
+            )
         )
         if should_fallback:
-            fallback_attempted = True
             for provider_name, provider_factory in fallback_providers:
                 try:
                     candidate_provider = fallback_instances.get(provider_name)
