@@ -875,13 +875,18 @@ def test_discovery_stops_all_topics_after_twscrape_is_blocked(monkeypatch):
         lambda: BlockedTwscrapeSearchProvider(),
     )
 
-    result = discover_posts(
-        FxTwitterSearchProvider(),
-        monitored_handles=[],
-        max_posts=25,
-        topic_names=topic_names,
-    )
+    from bot.discovery import DiscoveryProviderUnavailable
 
-    assert result == []
+    try:
+        discover_posts(
+            FxTwitterSearchProvider(),
+            monitored_handles=[],
+            max_posts=25,
+            topic_names=topic_names,
+        )
+    except DiscoveryProviderUnavailable:
+        pass
+    else:
+        raise AssertionError("all failed topic providers must raise an explicit outage")
     assert len(fallback_queries) == 1
 
