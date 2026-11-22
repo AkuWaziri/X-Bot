@@ -1,7 +1,6 @@
 import json
 from urllib.parse import parse_qs, urlparse
 
-from bot.x import websearch
 from bot.x.websearch import FreeWebSearchProvider, _syndication_token
 
 
@@ -117,7 +116,7 @@ def test_search_posts_skips_failed_hydration_and_returns_valid_posts(monkeypatch
     monkeypatch.setattr(
         FreeWebSearchProvider,
         "_search_ids",
-        lambda query, limit: [
+        lambda self, query, limit: [
             ("1234567890123456789", ("alice", "first")),
             ("2234567890123456789", ("bob", "second")),
         ],
