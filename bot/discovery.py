@@ -154,7 +154,6 @@ def discover_posts(
     monitored = {handle.lstrip("@").lower() for handle in monitored_handles}
     candidates: list[tuple[Post, str, int]] = []
     search_provider = provider
-    fallback_attempted = False
     successful_searches = 0
     failed_searches = 0
 
@@ -199,7 +198,8 @@ def discover_posts(
                         candidate_provider = provider_factory()
                         fallback_instances[provider_name] = candidate_provider
                     logging.getLogger(__name__).warning(
-                        "DISCOVERY PROVIDER FALLBACK | from=fxtwitter | to=%s | topic=%s",
+                        "DISCOVERY PROVIDER FALLBACK | from=%s | to=%s | topic=%s",
+                        type(search_provider).__name__,
                         provider_name,
                         topic.name,
                     )
