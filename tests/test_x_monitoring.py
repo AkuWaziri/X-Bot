@@ -925,6 +925,15 @@ def test_discovery_continues_all_topics_after_twscrape_is_blocked(monkeypatch):
         "bot.x.twscrape.TwscrapeProvider",
         lambda: BlockedTwscrapeSearchProvider(),
     )
+
+    class UnavailableNitterSearch:
+        def search_posts(self, query, limit=20):
+            raise RuntimeError("all public Nitter mirrors unavailable")
+
+    monkeypatch.setattr(
+        "bot.x.nitter.NitterSearchProvider",
+        lambda: UnavailableNitterSearch(),
+    )
     web_queries = []
 
     class UnavailableFreeWebSearch:
