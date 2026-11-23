@@ -159,6 +159,7 @@ def discover_posts(
 
     fallback_providers = [
         ("twscrape", lambda: __import__("bot.x.twscrape", fromlist=["TwscrapeProvider"]).TwscrapeProvider()),
+        ("nitter_search", lambda: __import__("bot.x.nitter", fromlist=["NitterSearchProvider"]).NitterSearchProvider()),
         ("free_web_search", lambda: __import__("bot.x.websearch", fromlist=["FreeWebSearchProvider"]).FreeWebSearchProvider()),
     ]
     fallback_instances = {}
