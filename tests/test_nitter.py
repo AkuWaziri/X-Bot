@@ -10,8 +10,8 @@ def test_extract_ids_accepts_relative_nitter_status_links():
     """
     hits = NitterSearchProvider._extract_ids(page, "https://nitter.mie.foundation")
     assert hits == [
-        ("1234567890123456789", "alice post"),
-        ("2234567890123456789", "bob post"),
+        ("1234567890123456789", ("alice", "alice post")),
+        ("2234567890123456789", ("bob", "bob post")),
     ]
 
 
